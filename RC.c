@@ -46,8 +46,12 @@
 
 #include "RC_utils.h"
 
-const char verstag[] = "\0$VER: RC 0.1 (22.03.2026)";
-const char *version  = "RC 0.1 (22.03.2026)";
+#include "RC_thelp.h"
+
+#include "RC_prefs.h"
+
+const char verstag[] = "\0$VER: RC 0.2 (24.03.2026)";
+const char *version  = "RC 0.2 (24.03.2026)";
 
 /* VBCC Stack */
 LONG __stack = 100000;
@@ -63,13 +67,13 @@ LONG __stack = 100000;
 /* Suchen-Type (nur EINES davon!) */
 #ifndef GF_TEXTEDITOR_Search_FromTop
 #define GF_TEXTEDITOR_Search_FromTop       0  /* Von vorne suchen */
-#define GF_TEXTEDITOR_Search_Backwards     1  /* Rückwärts suchen */
-#define GF_TEXTEDITOR_Search_Next          2  /* Vorwärts suchen (default) */
+#define GF_TEXTEDITOR_Search_Backwards     1  /* R?ckw?rts suchen */
+#define GF_TEXTEDITOR_Search_Next          2  /* Vorw?rts suchen (default) */
 #endif
 
 /* Suchen-Modifier (kombinierbar mit | ) */
 #ifndef GF_TEXTEDITOR_Search_CaseSensitive
-#define GF_TEXTEDITOR_Search_CaseSensitive (1<<8)  /* Groß-/Kleinschreibung */
+#define GF_TEXTEDITOR_Search_CaseSensitive (1<<8)  /* Gro?-/Kleinschreibung */
 #endif
 
 /* ==================================================================== */
@@ -87,310 +91,66 @@ struct Library *TextFieldBase;
 struct Library *ScrollerBase;
 struct Library *CheckBoxBase;
 struct Library *IconBase;
+struct Library *IntegerBase;
 
 struct RCed RCed;
 
-/* Hilfsmakro für Zugriff auf das aktive Dokument */
+/* Editor-Einstellungen (fuer RC_prefs.h) */
+struct EditorPrefs edPrefs = { FALSE,FALSE,FALSE,FALSE,
+                               TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,
+                               76, 8 };
+/* Hilfsmakro f?r Zugriff auf das aktive Dokument */
 #define CURRENT_DOC (&RCed.documents[RCed.activeDocIndex])
 
 
-/* ==================================================================
- * Dokument-Verwaltung für Multi-Document-Support
- * ================================================================== */
 
-/* Initialisiert alle 10 Dokumente */
-void initializeDocuments(void)
-{
-    int i;
-    for(i = 0; i < 10; i++)
-    {
-        strcpy(RCed.documents[i].dateiname, "");
-        RCed.documents[i].buffer = NULL;
-        RCed.documents[i].hasChanged = FALSE;
-        RCed.documents[i].fileLines = 0;
-        RCed.documents[i].fileSize = 0;
-        RCed.documents[i].isOpen = FALSE;
-    }
-    RCed.activeDocIndex = 0;
-    RCed.tabObject = NULL;
-    RCed.tabCallback = NULL;
-    
-    /* Erstes Dokument initialisieren */
-    strcpy(RCed.documents[0].dateiname, "Unbenannt");
-    RCed.documents[0].buffer = (char *)AllocVec(1, MEMF_CLEAR);
-    if(RCed.documents[0].buffer)
-        RCed.documents[0].buffer[0] = '\0';
-    RCed.documents[0].isOpen = TRUE;
-}
 
-/* Gibt aktuelles Dokument zurück */
-struct RCedDocument *getCurrentDocument(void)
-{
-    if(RCed.activeDocIndex < 10)
-        return &RCed.documents[RCed.activeDocIndex];
-    return NULL;
-}
-
-/* Wechselt zum angegebenen Dokument und zeigt es an */
-void refreshWindowTitle(struct Window *win)
+/* Setzt den Tab-Label des aktiven Dokuments (mit * wenn geaendert).
+ * SetWindowTitles() wird nicht mehr fuer den Dateinamen benoetigt --
+ * der Fenstertitel bleibt immer "RC".
+ */
+void updateActiveTabLabel(struct Window *win)
 {
     struct RCedDocument *doc = getCurrentDocument();
-    char title[280];
-
-    if(!doc)
-        return;
-
-    if(doc->hasChanged)
-        SNPrintf(title, sizeof(title), "%s *", doc->dateiname);
-    else
-        SNPrintf(title, sizeof(title), "%s", doc->dateiname);
-
-    SetWindowTitles(win, title, (UBYTE *)~0);
-}
-
-
-void switchDocument(ULONG index, struct Gadget *editor, struct Window *win)
-{
-    struct RCedDocument *doc;
-    
-    if(index >= MAX_DOCUMENTS)
-        return;
-    
-    doc = &RCed.documents[index];
-    RCed.activeDocIndex = index;
-    
-    /* Buffer in Editor laden */
-    if(doc->buffer)
-    {
-        DoGadgetMethod(editor, win, NULL, GM_TEXTEDITOR_ClearText, NULL);
-        SetGadgetAttrs(editor, win, NULL,
-            GA_TEXTEDITOR_Contents, (APTR)doc->buffer, TAG_DONE);
-        SetGadgetAttrs(editor, win, NULL,
-            GA_TEXTEDITOR_HasChanged, doc->hasChanged, TAG_DONE);
-    }
-    else
-    {
-        DoGadgetMethod(editor, win, NULL, GM_TEXTEDITOR_ClearText, NULL);
-        doc->buffer = (char *)AllocVec(1, MEMF_CLEAR);
-        if(doc->buffer)
-            doc->buffer[0] = '\0';
-    }
-    RefreshGList(editor, win, NULL, 1);
-
-    /* Title jetzt immer synchron halten */
-    refreshWindowTitle(win);
-}
-
-/* Speichert den aktuellen Buffer zurück ins aktive Dokument */
-void saveCurrentDocumentBuffer(struct Gadget *editor, struct Window *win)
-{
-    struct RCedDocument *doc = getCurrentDocument();
-    UBYTE *exported;
-    
-    if(!doc)
-        return;
-    
-    /* Buffer aus Editor exportieren */
-    exported = (UBYTE *)DoGadgetMethod(editor, win, NULL,
-        GM_TEXTEDITOR_ExportText, NULL);
-    
-    if(exported)
-    {
-        /* Alten Buffer freigeben */
-        if(doc->buffer)
-            FreeVec(doc->buffer);
-        
-        /* Neuen Buffer speichern */
-        doc->buffer = (char *)AllocVec(strlen((char *)exported) + 1, MEMF_CLEAR);
-        if(doc->buffer)
-            strcpy(doc->buffer, (char *)exported);
-        
-        /* Datei-Statistiken berechnen */
-        doc->fileSize = strlen((char *)exported);
-        doc->fileLines = 0;
-        int i;
-        for(i = 0; i < (int)doc->fileSize; i++)
-            if(exported[i] == '\n')
-                doc->fileLines++;
-        if(doc->fileSize > 0)
-            doc->fileLines++;
-    }
-}
-
-/* Öffnet ein neues leeres Dokument */
-ULONG openNewDocument(void)
-{
-    int i;
-    
-    for(i = 0; i < 10; i++)
-    {
-        if(!RCed.documents[i].isOpen)
-        {
-            strcpy(RCed.documents[i].dateiname, "Unbenannt");
-            if(RCed.documents[i].buffer)
-                FreeVec(RCed.documents[i].buffer);
-            RCed.documents[i].buffer = (char *)AllocVec(1, MEMF_CLEAR);
-            if(RCed.documents[i].buffer)
-                RCed.documents[i].buffer[0] = '\0';
-            RCed.documents[i].hasChanged = FALSE;
-            RCed.documents[i].fileLines = 0;
-            RCed.documents[i].fileSize = 0;
-            RCed.documents[i].isOpen = TRUE;
-            return (ULONG)i;
-        }
-    }
-    return (ULONG)-1;  /* Kein Platz mehr */
-}
-
-/* Schließt ein Dokument */
-void closeDocument(ULONG index)
-{
-    if(index >= 10)
-        return;
-    
-    if(RCed.documents[index].buffer)
-    {
-        FreeVec(RCed.documents[index].buffer);
-        RCed.documents[index].buffer = NULL;
-    }
-    RCed.documents[index].isOpen = FALSE;
-    strcpy(RCed.documents[index].dateiname, "");
-    
-    /* Wenn aktuelles Dokument geschlossen wird, zu anderem wechseln */
-    if(RCed.activeDocIndex == index)
-    {
-        int i;
-        for(i = 0; i < 10; i++)
-        {
-            if(RCed.documents[i].isOpen)
-            {
-                RCed.activeDocIndex = i;
-                return;
-            }
-        }
-        RCed.activeDocIndex = 0;
-    }
-}
-
-/* ClickTab Callback - wird bei Tab-Ereignissen aufgerufen */
-ULONG tabsCallback(struct TagItem *taglist)
-{
-    struct TagItem *tstate, *ti;
-    ti = taglist;
-    tstate = ti;
-    
-    while (ti = NextTagItem(&tstate))
-    {
-        switch (ti->ti_Tag)
-        {
-            case CLICKTAB_NodeClosed:
-                /* Tab wurde geschlossen - Dokument schließen */
-                {
-                    struct Node *node = (struct Node *)ti->ti_Data;
-                    /* Finde entsprechenden Index */
-                    ULONG i = (ULONG)(node->ln_Name[0] - '0');
-                    if(i < 10)
-                        closeDocument(i);
-                }
-                break;
-        }
-    }
-    return TRUE;
-}
-
-/* Erstellt die ClickTab-Gadget mit nur 1 Initial-Tab */
-void createClickTabs(void)
-{
     struct Node *node;
-    
-    NewList((struct List *)&RCed.tabList);
-    
-    /* Erstelle einen initial Tab "Unbenannt" */
-    node = AllocClickTabNode(
-        TNA_Text, "Unbenannt",
-        TNA_UserData, (APTR)(ULONG)0,
-        TAG_END);
-    
-    if(node)
-        AddTail((struct List *)&RCed.tabList, node);
-    
-    RCed.tabCallback = NULL;
-}
+    ULONG tabIdx = 0;
+    char labelBuf[270];
 
-/* Fügt einen neuen Tab für das Dokument hinzu */
-void addTabForDocument(ULONG docIndex, struct Window *win)
-{
-    struct Node *node;
-    struct RCedDocument *doc;
-    
-    if(docIndex >= 10)
+    if(!doc || !RCed.tabObject)
         return;
-    
-    doc = &RCed.documents[docIndex];
-    
-    /* Neuen Tab-Node erstellen mit Dokumentnamen */
-    node = AllocClickTabNode(
-        TNA_Text, doc->dateiname,
-        TNA_UserData, (APTR)(ULONG)docIndex,
-        TAG_END);
-    
-    if(node && RCed.tabObject)
-    {
-        AddTail((struct List *)&RCed.tabList, node);
-        
-        /* ClickTab aktualisieren */
-        SetGadgetAttrs((struct Gadget *)RCed.tabObject, win, NULL,
-            CLICKTAB_Labels, &RCed.tabList,
-            TAG_END);
-        
-        RefreshGList((struct Gadget *)RCed.tabObject, win, NULL, 1);
-    }
-}
 
-/* Aktualisiert alle Tab-Labels basierend auf offenen Dokumenten */
-void updateTabLabels(struct Window *win)
-{
-    struct Node *node;
-    
-    if(!RCed.tabObject)
-        return;
-    
-    /* Gehe durch alle Tabs und aktualisiere über UserData -> Dokumentindex */
     for(node = (struct Node *)RCed.tabList.mlh_Head; node->ln_Succ; node = node->ln_Succ)
     {
-        APTR userData;
-        ULONG docIndex;
-
-        GetClickTabNodeAttrs(node,
-            TNA_UserData, &userData,
-            TAG_END);
-
-        docIndex = (ULONG)userData;
-
-        if(docIndex < 10 && RCed.documents[docIndex].isOpen)
+        if(tabIdx == RCed.activeDocIndex)
         {
-            SetClickTabNodeAttrs(node,
-                TNA_Text, RCed.documents[docIndex].dateiname,
-                TAG_END);
+            if(doc->hasChanged)
+                sprintf(labelBuf, "%s *", doc->dateiname);
+            else
+                sprintf(labelBuf, "%s", doc->dateiname);
+
+            SetClickTabNodeAttrs(node, TNA_Text, labelBuf, TAG_END);
+            break;
         }
+        tabIdx++;
     }
-    
-    /* Aktualisiere ClickTab */
+
+    SetGadgetAttrs((struct Gadget *)RCed.tabObject, win, NULL,
+        CLICKTAB_Labels, &RCed.tabList,
+        TAG_DONE);
     RefreshGList((struct Gadget *)RCed.tabObject, win, NULL, 1);
 }
-
 
 /* ------------------------------------------------------------------
  * loadAndDisplay()
  *
- * L?dt eine Datei und zeigt den Inhalt im TextEditor-Gadget an.
- * Gibt den neuen Buffer-Zeiger zur?ck (oder NULL bei Fehler).
- * Den alten Buffer ?bergibt man als *oldBuf -- er wird freigegeben.
+ * Lädt eine Datei und zeigt den Inhalt im TextEditor-Gadget an.
+ * Gibt den neuen Buffer-Zeiger zurück (oder NULL bei Fehler).
+ * Den alten Buffer übergibt man als *oldBuf -- er wird freigegeben.
  *
  * HINWEIS: GA_TEXTEDITOR_Contents funktioniert beim Reaction
  * TextEditor auch via SetGadgetAttrs() zur Laufzeit, weil die
  * Klasse das Attribut in OM_SET auswertet.
- * Der fr?here Crash kam ausschlie?lich von SetWindowAttrs()
+ * Der frühere Crash kam ausschliesslich von SetWindowAttrs()
  * (fehlender Linker-Stub), nicht von Contents.
  *
  * GV_TEXTEDITOR_Replace_All wird hier NICHT verwendet, da die
@@ -427,7 +187,7 @@ static char *loadAndDisplay(const char    *name,
 int main(int argc, char *argv[])
 {
     Object        *Win_Object;
-    Object        *beenden_object, *neu_object, *uber_object;
+    Object        *beenden_object, *neu_object, *uber_object, *info_object;
     struct Window *window;
     struct Gadget *main_gadgets[GID_LAST];
     struct EasyStruct es = {
@@ -446,17 +206,16 @@ int main(int argc, char *argv[])
     struct timerequest *timerReq  = NULL;
     char   gotoLineBuf[32];
     ULONG  lastChanged = 0;  /* Verfolgung des letzten HasChanged-Status */
-    char   titleBuffer[256];  /* Puffer für Titel mit/ohne Asterisk */
 
     /* Library-Zeiger initialisieren */
     WindowBase = ButtonBase = StringBase = LabelBase  =
     GadToolsBase = LayoutBase = RequesterBase = AslBase =
-    TextFieldBase = IconBase = NULL;
+    TextFieldBase = IconBase = IntegerBase = CheckBoxBase = NULL;
 
     /* Alle Dokumente initialisieren */
     initializeDocuments();
 
-    /* Dateiname als Argument übergeben (ins erste Dokument) */
+    /* Dateiname als Argument ?bergeben (ins erste Dokument) */
     if(argc > 1)
     {
         strcpy(RCed.documents[0].dateiname, argv[1]);
@@ -478,12 +237,13 @@ int main(int argc, char *argv[])
     /* Requester-Objekte */
     beenden_object = requesterNew("Beenden");
     neu_object     = requesterNew("Neu");
-    uber_object    = requesterNew("Über");
+    uber_object    = requesterNew("?ber");
+    info_object    = requesterNew("Info");
 
     /* Hauptfenster aufbauen */
     Win_Object = WindowObject,
-        WA_ScreenTitle,   "RC",
-        WA_Title,         "TEST",
+        WA_ScreenTitle,   "RCed",
+        WA_Title,         "RCed",
         WA_SizeGadget,    TRUE,
         WA_DepthGadget,   TRUE,
         WA_DragBar,       TRUE,
@@ -515,8 +275,7 @@ int main(int argc, char *argv[])
             /* ---- Zeile 2: TextEditor + Scrollbalken ---- */
             LAYOUT_AddChild, HGroupObject,
                 LAYOUT_BevelStyle, BVS_SBAR_VERT,
-                LAYOUT_Label,      "My Editor",
-
+                
                 LAYOUT_AddChild, main_gadgets[GID_TEXTEDITOR] =
                     NewObject(TEXTEDITOR_GetClass(), NULL,
                         GA_ID,                         GID_TEXTEDITOR,
@@ -551,7 +310,6 @@ int main(int argc, char *argv[])
             /* ---- Informationsbalken ---- */
             LAYOUT_AddChild, HGroupObject,
                 LAYOUT_BevelStyle, BVS_SBAR_VERT,
-                LAYOUT_Label,      "Info",
                 LAYOUT_AddChild, main_gadgets[GID_STATUSBAR] = StringObject,
                     GA_ID,           GID_STATUSBAR,
                     GA_ReadOnly,     TRUE,
@@ -596,7 +354,7 @@ int main(int argc, char *argv[])
     if(!window)
         goto cleanup_obj;
 
-    /* Speichere den ClickTab-Zeiger für später */
+    /* Speichere den ClickTab-Zeiger f?r sp?ter */
     RCed.tabObject = (APTR)main_gadgets[GID_TAB_0];
 
     /* Falls Datei per Argument geladen: sofort anzeigen */
@@ -650,19 +408,24 @@ int main(int argc, char *argv[])
             {
                 switch(result & WMHI_CLASSMASK)
                 {
-                    /* ---- Fenster schließen ---- */
+                    /* ---- Fenster schlie?en ---- */
                     case WMHI_CLOSEWINDOW:
-                        done = TRUE;
-                        break;
+                                if(beendenReq("M?chten Sie RC wirklich verlassen?", beenden_object, window) == 1)
+                                {
+                                done = TRUE;
+                                }
+                                break;
 
-                    /* ---- Menü ---- */
+                    /* ---- Men? ---- */
                     case WMHI_MENUPICK:
                     {
                         switch(result & WMHI_MENUMASK)
                         {
                             case MENU_PROJEKT_BEENDEN:
-                                uberReq("\033cBeenden?", uber_object, window);
+                                if(beendenReq("M?chten Sie RC wirklich verlassen?", beenden_object, window) == 1)
+                                {
                                 done = TRUE;
+                                }
                                 break;
 
                             case MENU_PROJEKT_NEU:
@@ -672,16 +435,16 @@ int main(int argc, char *argv[])
                                 {
                                     struct RCedDocument *doc = &RCed.documents[newDoc];
                                     
-                                    /* Neuen Tab hinzufügen */
+                                    /* Neuen Tab hinzuf?gen */
                                     addTabForDocument(newDoc, window);
                                     
                                     /* Zum neuen Dokument wechseln */
                                     switchDocument(newDoc, main_gadgets[GID_TEXTEDITOR], window);
-                                    SetWindowTitles(window, doc->dateiname, (UBYTE *)~0);
+                                    updateActiveTabLabel(window);
                                 }
                                 else
                                 {
-                                    uberReq("Maximal 10 Dokumente offen!", uber_object, window);
+                                    infoReq("Maximal 10 Dokumente offen!", info_object, window);
                                 }
                                 break;
                             }
@@ -718,7 +481,7 @@ int main(int argc, char *argv[])
                                                 GA_TEXTEDITOR_Contents, (APTR)doc->buffer,
                                                 GA_TEXTEDITOR_HasChanged, FALSE,
                                                 TAG_DONE);
-                                            SetWindowTitles(window, doc->dateiname, (UBYTE *)~0);
+                                            updateActiveTabLabel(window);
 
                                             /* Tab-Name gleich anpassen */
                                             updateTabLabels(window);
@@ -759,17 +522,17 @@ int main(int argc, char *argv[])
                                             if(doc->fileSize > 0)
                                                 doc->fileLines++;
 
-                                            /* Neuen Tab hinzufügen */
+                                            /* Neuen Tab hinzuf?gen */
                                             addTabForDocument(newDoc, window);
 
                                             /* Zum neuen Dokument wechseln */
                                             switchDocument(newDoc, main_gadgets[GID_TEXTEDITOR], window);
-                                            refreshWindowTitle(window);
+                                            updateActiveTabLabel(window);
                                         }
                                         else
                                         {
                                             FreeVec(newBuffer);
-                                            uberReq("Maximal 10 Dokumente offen!", uber_object, window);
+                                            infoReq("Maximal 10 Dokumente offen!", info_object, window);
                                         }
                                     }
                                     FreeVec(retASL);
@@ -790,9 +553,7 @@ int main(int argc, char *argv[])
                                 /* Wenn Dateiname "Unbenannt" ist, zu "Speichern als..." gehen */
                                 if(strcmp(doc->dateiname, "Unbenannt") == 0)
                                 {
-                                    retASL = neuASL(window, "",
-                                                    "Datei speichern",
-                                                    "Speichern", FALSE);
+                                    retASL = neuASL(window, "", "Datei speichern","Speichern", FALSE);
                                     if(retASL)
                                     {
                                         strcpy(doc->dateiname, retASL);
@@ -808,7 +569,7 @@ int main(int argc, char *argv[])
                                             window, NULL,
                                             GA_TEXTEDITOR_HasChanged, FALSE,
                                             TAG_DONE);
-                                        SetWindowTitles(window, doc->dateiname, (UBYTE *)~0);
+                                        updateActiveTabLabel(window);
                                         
                                         /* Tab-Label aktualisieren */
                                         updateTabLabels(window);
@@ -853,9 +614,7 @@ int main(int argc, char *argv[])
                             case MENU_PROJEKT_SPEICHERNALS:
                             {
                                 struct RCedDocument *doc = getCurrentDocument();
-                                retASL = neuASL(window, "",
-                                                "Datei speichern",
-                                                "Speichern", FALSE);
+                                retASL = neuASL(window, "", "Datei speichern", "Speichern", FALSE);
                                 if(retASL && doc)
                                 {
                                     UBYTE *exp;
@@ -873,9 +632,7 @@ int main(int argc, char *argv[])
                                         window, NULL,
                                         GA_TEXTEDITOR_HasChanged, FALSE,
                                         TAG_DONE);
-                                    SetWindowTitles(window,
-                                                    doc->dateiname,
-                                                    (UBYTE *)~0);
+                                    updateActiveTabLabel(window);
                                     
                                     /* Tab-Label aktualisieren */
                                     updateTabLabels(window);
@@ -894,10 +651,12 @@ int main(int argc, char *argv[])
                             }
 
                             case MENU_PROJEKT_UBER:
-                                EasyRequestArgs(window, &es, NULL,
-                                                (APTR)&version);
+                            {
+                                char verBuf[64];
+                                sprintf(verBuf, "\033c%s", version);
+                                uberReq(verBuf, uber_object, window);
                                 break;
-
+                            }
                             case MENU_EINSTELLUNG_ZN:
                             {
                                 GetAttr(GA_TEXTEDITOR_ShowLineNumbers,
@@ -917,16 +676,13 @@ int main(int argc, char *argv[])
                                 char *searchText;
                                 BOOL caseSensitive = FALSE;
                                 BOOL fromTop = FALSE;
-                                ULONG flags = GF_TEXTEDITOR_Search_Next;  /* Default: vorwärts */
+                                ULONG flags = GF_TEXTEDITOR_Search_Next;  /* Default: vorw?rts */
                                 ULONG found = 0;
                                 
                                 searchText = searchDialog(window, &caseSensitive, &fromTop);
                                 if(searchText)
                                 {
-                                    printf("\n=== SUCHEN DEBUG ===\n");
-                                    printf("Suchtext: '%s' (Laenge: %ld)\n", searchText, (long)strlen(searchText));                                    
-                                    printf("caseSensitive: %d\n", caseSensitive);
-                                    printf("fromTop: %d\n", fromTop);
+ 
                                     
                                     /* Flags setzen */
                                     if(fromTop)
@@ -935,12 +691,7 @@ int main(int argc, char *argv[])
                                     if(caseSensitive)
                                         flags |= GF_TEXTEDITOR_Search_CaseSensitive;
                                     
-                                   printf("Flags: 0x%08lx\n", (unsigned long)flags);
-                                    printf("  FromTop=%d, Backwards=%d, Next=%d, CaseSens=0x%lx\n",
-                                           (int)GF_TEXTEDITOR_Search_FromTop,
-                                           (int)GF_TEXTEDITOR_Search_Backwards,
-                                           (int)GF_TEXTEDITOR_Search_Next,
-                                           (unsigned long)GF_TEXTEDITOR_Search_CaseSensitive);
+
                                     
                                     /* Texteditor-Info */
                                     {
@@ -948,20 +699,16 @@ int main(int argc, char *argv[])
                                         ULONG cx = 0, cy = 0;
                                         GetAttr(GA_TEXTEDITOR_CursorX, main_gadgets[GID_TEXTEDITOR], &cx);
                                         GetAttr(GA_TEXTEDITOR_CursorY, main_gadgets[GID_TEXTEDITOR], &cy);
-                                        printf("Cursor vor Suche: X=%ld Y=%ld\n", (long)cx, (long)cy);
                                         
                                         content = (UBYTE *)DoGadgetMethod(
                                             main_gadgets[GID_TEXTEDITOR],
                                             window, NULL,
                                             GM_TEXTEDITOR_ExportText, NULL);
-                                        if(content)
-                                        {
-                                            printf("Texteditor-Inhalt (erste 100 Zeichen):\n'%.100s'\n", content);
-                                        }
+                                        
                                     }
                                     
                                     /* Suchen! */
-                                    printf("\nRufe DoGadgetMethod auf...\n");
+
                                     found = DoGadgetMethod(
                                         main_gadgets[GID_TEXTEDITOR],
                                         window, NULL,
@@ -970,22 +717,20 @@ int main(int argc, char *argv[])
                                         searchText,
                                         flags);
                                     
-                                    printf("Rueckgabe: found=%ld\n", (long)found);
+
                                     
                                     if(found)
                                     {
                                         ULONG cx2 = 0, cy2 = 0;
                                         GetAttr(GA_TEXTEDITOR_CursorX, main_gadgets[GID_TEXTEDITOR], &cx2);
                                         GetAttr(GA_TEXTEDITOR_CursorY, main_gadgets[GID_TEXTEDITOR], &cy2);
-                                        printf("Cursor nach Suche: X=%ld Y=%ld\n", (long)cx2, (long)cy2);
-                                        printf(">>> GEFUNDEN! <<<\n");
+
                                     }
                                     else
                                     {
-                                        printf(">>> NICHT GEFUNDEN! <<<\n");
-                                        uberReq("Suchtext nicht gefunden!", uber_object, window);
+
+                                        infoReq("Suchtext nicht gefunden!", info_object, window);
                                     }
-                                    printf("===================\n\n");
                                     
                                     FreeVec(searchText);
                                 }
@@ -1007,9 +752,7 @@ int main(int argc, char *argv[])
                                 {
                                     if(searchText)
                                     {
-                                        printf("DEBUG: Ersetze '%s' mit '%s' (case=%d, all=%d)\n",
-                                               searchText, replaceText ? replaceText : "", 
-                                               caseSensitive, replaceAll);
+
                                         
                                         /* Flags setzen */
                                         searchFlags = GF_TEXTEDITOR_Search_FromTop;  /* Immer von vorne */
@@ -1041,7 +784,7 @@ int main(int argc, char *argv[])
                                                 
                                                 count++;
                                                 
-                                                /* Nächstes Vorkommen suchen (nicht mehr FromTop!) */
+                                                /* N?chstes Vorkommen suchen (nicht mehr FromTop!) */
                                                 searchFlags = GF_TEXTEDITOR_Search_Next;
                                                 if(caseSensitive)
                                                     searchFlags |= GF_TEXTEDITOR_Search_CaseSensitive;
@@ -1049,17 +792,16 @@ int main(int argc, char *argv[])
                                         }
                                         while(found && replaceAll);
                                         
-                                        printf("DEBUG: %ld Ersetzungen\n", (long)count);
                                         
                                         if(count == 0)
                                         {
-                                            uberReq("Suchtext nicht gefunden!", uber_object, window);
+                                            infoReq("Suchtext nicht gefunden!", info_object, window);
                                         }
                                         else if(replaceAll && count > 0)
                                         {
                                             char msgBuf[128];
                                             sprintf(msgBuf, "%ld Vorkommen ersetzt!", (long)count);
-                                            uberReq(msgBuf, uber_object, window);
+                                            infoReq(msgBuf, info_object, window);
                                         }
                                         
                                         FreeVec(searchText);
@@ -1090,10 +832,8 @@ int main(int argc, char *argv[])
                             
                             case MENU_PREFS_ALL:
                             {
-                                printf(">>> gefunden <<<\n");
-                                    PrefsDialog();
+                                openPrefsWindow(window, &edPrefs);
                                 break;
-
                             }
                         }
                         break;
@@ -1120,9 +860,7 @@ int main(int argc, char *argv[])
                                 if(tabIndex < 10 && RCed.documents[tabIndex].isOpen)
                                 {
                                     switchDocument(tabIndex, main_gadgets[GID_TEXTEDITOR], window);
-                                    SetWindowTitles(window,
-                                        RCed.documents[tabIndex].dateiname,
-                                        (UBYTE *)~0);
+                                    updateActiveTabLabel(window);
                                 }
                                 break;
                             }
@@ -1130,7 +868,7 @@ int main(int argc, char *argv[])
                             case GID_EmptyB:
                             {
                                 struct RCedDocument *doc = getCurrentDocument();
-                                if(frageReq("\033cText löschen?",
+                                if(frageReq("\033cText l?schen?",
                                             "_Ja|_Nein",
                                             neu_object, window) == 1)
                                 {
@@ -1149,9 +887,7 @@ int main(int argc, char *argv[])
                                         doc->hasChanged = FALSE;
                                         doc->fileLines = 0;
                                         doc->fileSize = 0;
-                                        SetWindowTitles(window,
-                                                        doc->dateiname,
-                                                        (UBYTE *)~0);
+                                        updateActiveTabLabel(window);
                                     }
                                 }
                                 break;
@@ -1207,22 +943,13 @@ int main(int argc, char *argv[])
                     SCROLLER_Top,     pFirst,
                     TAG_DONE);
 
-                /* Fenstertitel mit Asterisk aktualisieren, wenn sich HasChanged ändert */
+                /* Tab-Label mit * aktualisieren wenn HasChanged sich aendert */
                 GetAttr(GA_TEXTEDITOR_HasChanged,
                         main_gadgets[GID_TEXTEDITOR], &currentChanged);
                 if(doc && currentChanged != lastChanged)
                 {
-                    if(currentChanged)
-                    {
-                        /* Text wurde geändert - Asterisk hinzufügen */
-                        sprintf(titleBuffer, "%s *", doc->dateiname);
-                    }
-                    else
-                    {
-                        /* Text wurde gespeichert - kein Asterisk */
-                        sprintf(titleBuffer, "%s", doc->dateiname);
-                    }
-                    SetWindowTitles(window, titleBuffer, (UBYTE *)~0);
+                    doc->hasChanged = currentChanged;
+                    updateActiveTabLabel(window);
                     lastChanged = currentChanged;
                 }
 
@@ -1245,6 +972,7 @@ cleanup_obj:
     if(timerPort) DeleteMsgPort(timerPort);
     DisposeObject(beenden_object);
     DisposeObject(uber_object);
+    DisposeObject(info_object);
     DisposeObject(neu_object);
     DisposeObject(Win_Object);
 

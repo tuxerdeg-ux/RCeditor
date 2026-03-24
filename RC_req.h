@@ -36,7 +36,7 @@ ULONG beendenReq(char *text, Object *obj, struct Window *win)
     return OpenRequesterTags(obj, win,
         REQ_Type,       REQTYPE_INFO,
         REQ_BodyText,   text,
-        REQ_GadgetText, "_Ja|_Nein|_Abbruch",
+        REQ_GadgetText, "_Ja|_Nein",
         TAG_DONE);
 }
 
@@ -50,6 +50,15 @@ ULONG frageReq(char *text, char *gadgets, Object *obj, struct Window *win)
 }
 
 ULONG uberReq(char *text, Object *obj, struct Window *win)
+{
+    return OpenRequesterTags(obj, win,
+        REQ_Type,       REQTYPE_INFO,
+        REQ_BodyText,   text,
+        REQ_GadgetText, "_OK",
+        TAG_DONE);
+}
+
+ULONG infoReq(char *text, Object *obj, struct Window *win)
 {
     return OpenRequesterTags(obj, win,
         REQ_Type,       REQTYPE_INFO,

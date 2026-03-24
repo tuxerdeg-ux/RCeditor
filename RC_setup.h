@@ -35,18 +35,19 @@ extern struct Library *ScrollerBase;
 extern struct Library *CheckBoxBase;
 extern struct Library *IconBase;
 extern struct Library *ClickTabBase;
-/* Struktur für ein einzelnes Dokument */
+extern struct Library *IntegerBase;
+/* Struktur f?r ein einzelnes Dokument */
 struct RCedDocument
 {
     char dateiname[256];     /* Dateiname */
     char *buffer;            /* Textinhalt */
-    ULONG hasChanged;        /* Text wurde geändert */
+    ULONG hasChanged;        /* Text wurde ge?ndert */
     ULONG fileLines;         /* Anzahl Zeilen */
-    ULONG fileSize;          /* Größe in Bytes */
+    ULONG fileSize;          /* Gr??e in Bytes */
     BOOL isOpen;             /* Dokument offen? */
 };
 
-/* Globale Struktur für Multi-Dokument-Support */
+/* Globale Struktur f?r Multi-Dokument-Support */
 struct RCed
 {
     struct RCedDocument documents[10];  /* Bis zu 10 Dokumente */
@@ -69,6 +70,7 @@ void closeLibraries(void)
     if(RequesterBase) CloseLibrary(RequesterBase);
     if(AslBase)       CloseLibrary(AslBase);
     if(ClickTabBase)  CloseLibrary(ClickTabBase);
+    if(IntegerBase)   CloseLibrary(IntegerBase);
 }
 
 BOOL openLibraries(void)
@@ -83,7 +85,9 @@ BOOL openLibraries(void)
        (LayoutBase    = OpenLibrary("gadgets/layout.gadget",     0L)) &&
        (RequesterBase = OpenLibrary("requester.class",           0L)) &&
        (AslBase       = OpenLibrary("asl.library",               0L)) &&
-       (ClickTabBase  = OpenLibrary("gadgets/clicktab.gadget",   0L)))
+       (ClickTabBase  = OpenLibrary("gadgets/clicktab.gadget",   0L)) &&
+       (IntegerBase   = OpenLibrary("gadgets/integer.gadget",    0L)))
+       
     {
         ret = TRUE;
     }
