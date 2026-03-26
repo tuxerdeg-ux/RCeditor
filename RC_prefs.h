@@ -88,8 +88,14 @@ enum
     PGID_TABSIZE,
 
     /* Buttons */
+
     PGID_ACCEPT,
+    PGID_SAVE,
     PGID_CANCEL,
+
+
+    /*nicht direkt verwendet */
+    PGID_HORIZ_33, /* Layout-Objekt f?r die Buttons (nicht direkt verwendet) */
 
     PGID_LAST
 };
@@ -298,24 +304,41 @@ BOOL openPrefsWindow(struct Window *parentWin, struct EditorPrefs *prefs)
             /* ======================================================= */
             /* Buttons: ACCEPT / CANCEL                                 */
             /* ======================================================= */
-            LAYOUT_AddChild, HGroupObject,
-                LAYOUT_SpaceOuter, FALSE,
-
-                LAYOUT_AddChild, pg[PGID_ACCEPT] = ButtonObject,
-                    GA_ID,       PGID_ACCEPT,
-                    GA_Text,     "_Save",
-                    GA_RelVerify, TRUE,
-                    GA_TabCycle,  TRUE,
-                End,
-
-                LAYOUT_AddChild, pg[PGID_CANCEL] = ButtonObject,
-                    GA_ID,       PGID_CANCEL,
-                    GA_Text,     "_Abbruch",
-                    GA_RelVerify, TRUE,
-                    GA_TabCycle,  TRUE,
-                End,
-
-            End, /* Button-HGroup */
+        LAYOUT_AddChild, pg[PGID_HORIZ_33] = LayoutObject,
+          GA_ID, PGID_HORIZ_33,
+          LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+          LAYOUT_AddChild, pg[PGID_ACCEPT] = ButtonObject,
+            GA_ID, PGID_ACCEPT,
+            GA_Text, "Übernehmen",
+            GA_RelVerify, TRUE,
+            GA_TabCycle, TRUE,
+            BUTTON_TextPen, 1,
+            BUTTON_BackgroundPen, 0,
+            BUTTON_FillTextPen, 1,
+            BUTTON_FillPen, 3,
+          ButtonEnd,
+          LAYOUT_AddChild, pg[PGID_SAVE] = ButtonObject,
+            GA_ID, PGID_SAVE,
+            GA_Text, "Save",
+            GA_RelVerify, TRUE,
+            GA_TabCycle, TRUE,
+            BUTTON_TextPen, 1,
+            BUTTON_BackgroundPen, 0,
+            BUTTON_FillTextPen, 1,
+            BUTTON_FillPen, 3,
+          ButtonEnd,
+          LAYOUT_AddChild, pg[PGID_CANCEL] = ButtonObject,
+            GA_ID, PGID_CANCEL,
+            GA_Text, "Abbruch",
+            GA_RelVerify, TRUE,
+            GA_TabCycle, TRUE,
+            BUTTON_TextPen, 1,
+            BUTTON_BackgroundPen, 0,
+            BUTTON_FillTextPen, 1,
+            BUTTON_FillPen, 3,
+          ButtonEnd,
+          
+        LayoutEnd,
             CHILD_WeightedHeight, 0,
 
         End, /* VGroup PGID_MAIN */
@@ -412,7 +435,11 @@ BOOL openPrefsWindow(struct Window *parentWin, struct EditorPrefs *prefs)
                             accept = TRUE;
                             done   = TRUE;
                             break;
-
+                        case PGID_SAVE:
+                            *prefs = tmp;   /* Werte ?bernehmen */
+                            accept = TRUE;
+                            done   = TRUE;
+                            break;
                         case PGID_CANCEL:
                             done = TRUE;
                             break;

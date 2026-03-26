@@ -96,8 +96,10 @@ struct Library *IntegerBase;
 struct RCed RCed;
 
 /* Editor-Einstellungen (fuer RC_prefs.h) */
-struct EditorPrefs edPrefs = { FALSE,FALSE,FALSE,FALSE,
-                               TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,
+/* autoIndent, wordWrap, blockCursor, flashCursor,
+   showLFs, showTABs, showLineNumbers, wrapMargin, tabSize */
+struct EditorPrefs edPrefs = { FALSE,FALSE,TRUE,FALSE,
+                               FALSE,FALSE,FALSE,
                                76, 8 };
 /* Hilfsmakro f?r Zugriff auf das aktive Dokument */
 #define CURRENT_DOC (&RCed.documents[RCed.activeDocIndex])
@@ -143,14 +145,14 @@ void updateActiveTabLabel(struct Window *win)
 /* ------------------------------------------------------------------
  * loadAndDisplay()
  *
- * Lädt eine Datei und zeigt den Inhalt im TextEditor-Gadget an.
- * Gibt den neuen Buffer-Zeiger zurück (oder NULL bei Fehler).
- * Den alten Buffer übergibt man als *oldBuf -- er wird freigegeben.
+ * L?dt eine Datei und zeigt den Inhalt im TextEditor-Gadget an.
+ * Gibt den neuen Buffer-Zeiger zur?ck (oder NULL bei Fehler).
+ * Den alten Buffer ?bergibt man als *oldBuf -- er wird freigegeben.
  *
  * HINWEIS: GA_TEXTEDITOR_Contents funktioniert beim Reaction
  * TextEditor auch via SetGadgetAttrs() zur Laufzeit, weil die
  * Klasse das Attribut in OM_SET auswertet.
- * Der frühere Crash kam ausschliesslich von SetWindowAttrs()
+ * Der fr?here Crash kam ausschliesslich von SetWindowAttrs()
  * (fehlender Linker-Stub), nicht von Contents.
  *
  * GV_TEXTEDITOR_Replace_All wird hier NICHT verwendet, da die
