@@ -50,8 +50,8 @@
 
 #include "RC_prefs.h"
 
-const char verstag[] = "\0$VER: RC 0.2 (24.03.2026)";
-const char *version  = "RC 0.2 (24.03.2026)";
+const char verstag[] = "\0$VER: RC 0.2a (27.03.2026)";
+const char *version  = "RC 0.2a (27.03.2026)";
 
 /* VBCC Stack */
 LONG __stack = 100000;
