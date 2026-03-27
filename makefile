@@ -4,7 +4,7 @@
 # ================================
 
 CC      = vc
-TARGET  = RC
+TARGET  = RCeditor
 LOGFILE = build.log
 
 # Source

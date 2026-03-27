@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
                         GA_TEXTEDITOR_IndentWidth,      0,
                         GA_TEXTEDITOR_LineEndingExport, LINEENDING_LF,
                         GA_TEXTEDITOR_ShowLineNumbers,  FALSE,
-                        GA_TEXTEDITOR_SpacesPerTAB,     4,
+                        GA_TEXTEDITOR_SpacesPerTAB,     1,
                         GA_TEXTEDITOR_TabKeyPolicy,
                         GV_TEXTEDITOR_TabKey_IndentsAfter,
                     End,
@@ -834,7 +834,15 @@ int main(int argc, char *argv[])
                             
                             case MENU_PREFS_ALL:
                             {
-                                openPrefsWindow(window, &edPrefs);
+                               if(openPrefsWindow(window, &edPrefs))
+                                {
+                                    /* Werte sofort auf TextEditor anwenden */
+                                    SetGadgetAttrs(main_gadgets[GID_TEXTEDITOR], window, NULL,
+                                        GA_TEXTEDITOR_ShowLineNumbers, edPrefs.showLineNumbers,
+                                        GA_TEXTEDITOR_WrapBorder,      edPrefs.wrapMargin,
+                                        GA_TEXTEDITOR_SpacesPerTAB,    edPrefs.tabSize,
+                                        TAG_DONE);
+                                }
                                 break;
                             }
                         }

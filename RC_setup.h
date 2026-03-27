@@ -70,6 +70,7 @@ void closeLibraries(void)
     if(RequesterBase) CloseLibrary(RequesterBase);
     if(AslBase)       CloseLibrary(AslBase);
     if(ClickTabBase)  CloseLibrary(ClickTabBase);
+    if(LabelBase) CloseLibrary(LabelBase);
     if(IntegerBase)   CloseLibrary(IntegerBase);
 }
 
@@ -86,6 +87,7 @@ BOOL openLibraries(void)
        (RequesterBase = OpenLibrary("requester.class",           0L)) &&
        (AslBase       = OpenLibrary("asl.library",               0L)) &&
        (ClickTabBase  = OpenLibrary("gadgets/clicktab.gadget",   0L)) &&
+       (LabelBase = OpenLibrary("images/label.image", 0L)) &&
        (IntegerBase   = OpenLibrary("gadgets/integer.gadget",    0L)))
        
     {

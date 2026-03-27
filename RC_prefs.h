@@ -1,31 +1,10 @@
 /*
-** RC_prefs.h  ?  Editor Preferences Window
+** RC_prefs.h - Editor Preferences Window
 **
-** Nachbau des "Editor Preferences"-Fensters (siehe Screenshot).
-**
-** Ben?tigte Libraries (zus?tzlich zu den bereits in RC_setup.h
-** ge?ffneten):
-**   checkbox.gadget   (CheckBoxBase)
-**   integer.gadget    (IntegerBase)
-**
-** Einbinden in RC_setup.h:
-**   struct Library *CheckBoxBase = NULL;
-**   struct Library *IntegerBase  = NULL;
-**
-**   In openLibraries():
-**     CheckBoxBase = OpenLibrary("gadgets/checkbox.gadget", 0L);
-**     IntegerBase  = OpenLibrary("gadgets/integer.gadget",  0L);
-**
-**   In closeLibraries():
-**     if(CheckBoxBase) CloseLibrary(CheckBoxBase);
-**     if(IntegerBase)  CloseLibrary(IntegerBase);
-**
-** Verwendung:
-**   struct EditorPrefs prefs = { FALSE,FALSE,FALSE,FALSE,
-**                                TRUE, FALSE,FALSE,FALSE,FALSE,
-**                                76, 8 };
-**   openPrefsWindow(window, &prefs);
-**   // Nach R?ckkehr enth?lt prefs die (ggf. ge?nderten) Werte.
+** Benoetigt zusaetzlich zu RC_setup.h:
+**   LabelBase  = OpenLibrary("images/label.image",  0L);
+**   IntegerBase = OpenLibrary("gadgets/integer.gadget", 0L);
+**   CheckBoxBase = OpenLibrary("gadgets/checkbox.gadget", 0L);
 */
 
 #ifndef RC_PREFS_H
@@ -33,8 +12,12 @@
 
 #include <proto/checkbox.h>
 #include <proto/integer.h>
+#include <proto/label.h>
 #include <gadgets/checkbox.h>
 #include <gadgets/integer.h>
+#include <images/label.h>
+#include <proto/space.h>
+#include <gadgets/space.h>
 
 /* ------------------------------------------------------------------ */
 /* Preferences-Datenstruktur                                           */
@@ -42,307 +25,253 @@
 
 struct EditorPrefs
 {
-    /* Gruppe 1 */
     BOOL autoIndent;
     BOOL wordWrap;
-    BOOL stripEOL;
-    BOOL autoPadEOL;
-
-    /* Gruppe 2 */
     BOOL blockCursor;
     BOOL flashCursor;
-    BOOL searchZoom;
-    BOOL newSlider;
     BOOL showLFs;
     BOOL showTABs;
-
-    /* Gruppe 3 ? numerisch */
+    BOOL showLineNumbers;
     LONG wrapMargin;
     LONG tabSize;
 };
 
 /* ------------------------------------------------------------------ */
-/* GadgetIDs f?r das Prefs-Fenster                                     */
+/* Gadget-Indizes (Array-Position)                                     */
 /* ------------------------------------------------------------------ */
-
-enum
-{
-    PGID_MAIN = 0,
-
-    /* Gruppe 1 */
-    PGID_AUTOINDENT,
-    PGID_STRIPEDOL,
-    PGID_WORDWRAP,
-    PGID_AUTOPADEDOL,
-
-    /* Gruppe 2 */
-    PGID_BLOCKCURSOR,
-    PGID_FLASHCURSOR,
-    PGID_SEARCHZOOM,
-    PGID_NEWSLIDER,
-    PGID_SHOWLFS,
-    PGID_SHOWTABS,
-
-    /* Gruppe 3 */
-    PGID_WRAPMARGIN,
-    PGID_TABSIZE,
-
-    /* Buttons */
-
-    PGID_ACCEPT,
-    PGID_SAVE,
-    PGID_CANCEL,
-
-
-    /*nicht direkt verwendet */
-    PGID_HORIZ_33, /* Layout-Objekt f?r die Buttons (nicht direkt verwendet) */
-
-    PGID_LAST
+enum prefs_idx {
+    pr_grp,
+    pr_row1,
+    pr_autoindent,
+    pr_wordwrap,
+    pr_row2,
+    pr_blockcursor,
+    pr_flashcursor,
+    pr_row3,
+    pr_showlfs,
+    pr_showtabs,
+    pr_row4,
+    pr_showlinenumbers,
+    pr_row5,
+    pr_grp_wrap,
+    pr_wrapmargin,
+    pr_grp_tab,
+    pr_tabsize,
+    pr_row_btn,
+    pr_ubern,
+    pr_save,
+    pr_cancel,
+    PR_LAST
 };
 
 /* ------------------------------------------------------------------ */
-/* Hilfsmakro: ein Label+Checkbox-Paar nebeneinander                   */
-/* LAYOUT_AddChild ? LabelObject ? End,                                */
-/*                   CHILD_Label ?                                     */
+/* Gadget-IDs (fuer WMHI_GADGETMASK)                                   */
 /* ------------------------------------------------------------------ */
+enum prefs_id {
+    PR_ID_AUTOINDENT     = 101,
+    PR_ID_WORDWRAP       = 102,
+    PR_ID_BLOCKCURSOR    = 103,
+    PR_ID_FLASHCURSOR    = 104,
+    PR_ID_SHOWLFS        = 105,
+    PR_ID_SHOWTABS       = 106,
+    PR_ID_SHOWLINENUMBERS= 107,
+    PR_ID_WRAPMARGIN     = 108,
+    PR_ID_TABSIZE        = 109,
+    PR_ID_UBERN          = 110,
+    PR_ID_SAVE           = 111,
+    PR_ID_CANCEL         = 112
+};
 
 /* ------------------------------------------------------------------ */
 /* openPrefsWindow()                                                   */
-/*   ?ffnet das Preferences-Fenster modal (eigene Event-Loop).         */
-/*   Gibt TRUE zur?ck wenn "Accept" gedr?ckt wurde,                    */
-/*   FALSE bei "Cancel" oder Schliessen.                               */
 /* ------------------------------------------------------------------ */
 
 BOOL openPrefsWindow(struct Window *parentWin, struct EditorPrefs *prefs)
 {
-    Object *prefsWin;
-    struct Window *pw;
-    struct Gadget *pg[PGID_LAST];
+    Object         *prefsWin;
+    struct Window  *pw;
+    struct Gadget  *pg[PR_LAST];
 
-    ULONG signal, result;
-    BOOL  done   = FALSE;
-    BOOL  accept = FALSE;
+    ULONG  signal, result;
+    BOOL   done   = FALSE;
+    BOOL   accept = FALSE;
 
-    /* tempor?re Arbeitskopie ? erst bei Accept ?bernehmen */
     struct EditorPrefs tmp = *prefs;
 
     prefsWin = WindowObject,
         WA_Title,        "Editor Preferences",
-        WA_ScreenTitle,  "RC ? Editor Preferences",
-        WA_DragBar,      TRUE,
-        WA_DepthGadget,  TRUE,
+        WA_ScreenTitle,  "RC - Editor Preferences",
+        WA_Left,         50,
+        WA_Top,          50,
+        WA_Width,        360,
+        WA_Height,       280,
+        WA_MinWidth,     300,
+        WA_MinHeight,    200,
+        WA_MaxWidth,     8192,
+        WA_MaxHeight,    8192,
         WA_CloseGadget,  TRUE,
+        WA_DepthGadget,  TRUE,
+        WA_DragBar,      TRUE,
         WA_Activate,     TRUE,
-        WA_Width,        380,
-        WA_AutoAdjust,   TRUE,
-        WA_NewLookMenus, FALSE,
+        WA_NoCareRefresh,TRUE,
 
-        WINDOW_ParentGroup, pg[PGID_MAIN] = VGroupObject,
-            LAYOUT_SpaceOuter, TRUE,
-            LAYOUT_DeferLayout, TRUE,
+        WINDOW_ParentGroup, VLayoutObject,
+    LAYOUT_SpaceOuter, FALSE,
+    LAYOUT_DeferLayout, TRUE,
 
-            /* ======================================================= */
-            /* Gruppe 1: Auto Indent / Strip EOL / Word Wrap / AutoPad  */
-            /* ======================================================= */
-            LAYOUT_AddChild, VGroupObject,
-                LAYOUT_BevelStyle, BVS_GROUP,
-                LAYOUT_SpaceInner, TRUE,
+    /* ---- Checkbox-Gruppe ---- */
+    LAYOUT_AddChild, LayoutObject,
+        LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+        LAYOUT_BevelStyle, BVS_GROUP,
+        LAYOUT_SpaceInner, TRUE,
 
-                LAYOUT_AddChild, HGroupObject,
-                    LAYOUT_SpaceOuter, FALSE,
+        /* Row 1 */
+        LAYOUT_AddChild, LayoutObject,
+            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+            LAYOUT_LeftSpacing, 5,
+            LAYOUT_TopSpacing, 5,
 
-                    /* linke Spalte */
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_AUTOINDENT] = CheckBoxObject,
-                            GA_ID,       PGID_AUTOINDENT,
-                            GA_Text,     "_Auto Indent",
-                            GA_Selected, tmp.autoIndent,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
+            LAYOUT_AddChild, pg[pr_autoindent] = CheckBoxObject,
+                GA_ID, PR_ID_AUTOINDENT,
+                GA_Text, "_Auto Indent",
+                GA_Selected, tmp.autoIndent,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
 
-                    /* rechte Spalte */
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_STRIPEDOL] = CheckBoxObject,
-                            GA_ID,       PGID_STRIPEDOL,
-                            GA_Text,     "Strip _EOL",
-                            GA_Selected, tmp.stripEOL,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                End, /* HGroup Zeile 1 */
-
-                LAYOUT_AddChild, HGroupObject,
-                    LAYOUT_SpaceOuter, FALSE,
-
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_WORDWRAP] = CheckBoxObject,
-                            GA_ID,       PGID_WORDWRAP,
-                            GA_Text,     "_Word Wrap",
-                            GA_Selected, tmp.wordWrap,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_AUTOPADEDOL] = CheckBoxObject,
-                            GA_ID,       PGID_AUTOPADEDOL,
-                            GA_Text,     "Auto _Pad EOL",
-                            GA_Selected, tmp.autoPadEOL,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                End, /* HGroup Zeile 2 */
-
-            End, /* Gruppe 1 */
-            CHILD_WeightedHeight, 0,
-
-            /* ======================================================= */
-            /* Gruppe 2: Block Cursor / Flash Cursor / etc.             */
-            /* ======================================================= */
-            LAYOUT_AddChild, VGroupObject,
-                LAYOUT_BevelStyle, BVS_GROUP,
-                LAYOUT_SpaceInner, TRUE,
-
-                LAYOUT_AddChild, HGroupObject,
-                    LAYOUT_SpaceOuter, FALSE,
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_BLOCKCURSOR] = CheckBoxObject,
-                            GA_ID,       PGID_BLOCKCURSOR,
-                            GA_Text,     "_Block Cursor",
-                            GA_Selected, tmp.blockCursor,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_FLASHCURSOR] = CheckBoxObject,
-                            GA_ID,       PGID_FLASHCURSOR,
-                            GA_Text,     "_Flash Cursor",
-                            GA_Selected, tmp.flashCursor,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                End,
-
-                LAYOUT_AddChild, HGroupObject,
-                    LAYOUT_SpaceOuter, FALSE,
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_SEARCHZOOM] = CheckBoxObject,
-                            GA_ID,       PGID_SEARCHZOOM,
-                            GA_Text,     "_Search Zoom",
-                            GA_Selected, tmp.searchZoom,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_NEWSLIDER] = CheckBoxObject,
-                            GA_ID,       PGID_NEWSLIDER,
-                            GA_Text,     "_New Slider",
-                            GA_Selected, tmp.newSlider,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                End,
-
-                LAYOUT_AddChild, HGroupObject,
-                    LAYOUT_SpaceOuter, FALSE,
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_SHOWLFS] = CheckBoxObject,
-                            GA_ID,       PGID_SHOWLFS,
-                            GA_Text,     "Show _LF's",
-                            GA_Selected, tmp.showLFs,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                    LAYOUT_AddChild, HGroupObject,
-                        LAYOUT_AddChild, pg[PGID_SHOWTABS] = CheckBoxObject,
-                            GA_ID,       PGID_SHOWTABS,
-                            GA_Text,     "Show _TAB's",
-                            GA_Selected, tmp.showTABs,
-                            GA_RelVerify, TRUE,
-                        End,
-                    End,
-                End,
-
-            End, /* Gruppe 2 */
-            CHILD_WeightedHeight, 0,
-
-            /* ======================================================= */
-            /* Gruppe 3: Wrap Margin / Tab Size                         */
-            /* ======================================================= */
-            LAYOUT_AddChild, HGroupObject,
-                LAYOUT_BevelStyle, BVS_GROUP,
-                LAYOUT_SpaceInner, TRUE,
-
-                /* Wrap Margin: LAYOUT_Label als CHILD-Tag nach dem Gadget */
-                LAYOUT_AddChild, pg[PGID_WRAPMARGIN] = IntegerObject,
-                    GA_ID,           PGID_WRAPMARGIN,
-                    GA_RelVerify,    TRUE,
-                    GA_TabCycle,     TRUE,
-                    INTEGER_Number,  tmp.wrapMargin,
-                    INTEGER_Minimum, 0,
-                    INTEGER_Maximum, 999,
-                End,
-                CHILD_Label,         "Wrap _Margin :",
-                CHILD_WeightedWidth, 30,
-
-                /* Tab Size */
-                LAYOUT_AddChild, pg[PGID_TABSIZE] = IntegerObject,
-                    GA_ID,           PGID_TABSIZE,
-                    GA_RelVerify,    TRUE,
-                    GA_TabCycle,     TRUE,
-                    INTEGER_Number,  tmp.tabSize,
-                    INTEGER_Minimum, 1,
-                    INTEGER_Maximum, 32,
-                End,
-                CHILD_Label,         "_Tab Size :",
-                CHILD_WeightedWidth, 20,
-
-            End, /* Gruppe 3 */
-            CHILD_WeightedHeight, 0,
-
-            /* ======================================================= */
-            /* Buttons: ACCEPT / CANCEL                                 */
-            /* ======================================================= */
-        LAYOUT_AddChild, pg[PGID_HORIZ_33] = LayoutObject,
-          GA_ID, PGID_HORIZ_33,
-          LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-          LAYOUT_AddChild, pg[PGID_ACCEPT] = ButtonObject,
-            GA_ID, PGID_ACCEPT,
-            GA_Text, "Übernehmen",
-            GA_RelVerify, TRUE,
-            GA_TabCycle, TRUE,
-            BUTTON_TextPen, 1,
-            BUTTON_BackgroundPen, 0,
-            BUTTON_FillTextPen, 1,
-            BUTTON_FillPen, 3,
-          ButtonEnd,
-          LAYOUT_AddChild, pg[PGID_SAVE] = ButtonObject,
-            GA_ID, PGID_SAVE,
-            GA_Text, "Save",
-            GA_RelVerify, TRUE,
-            GA_TabCycle, TRUE,
-            BUTTON_TextPen, 1,
-            BUTTON_BackgroundPen, 0,
-            BUTTON_FillTextPen, 1,
-            BUTTON_FillPen, 3,
-          ButtonEnd,
-          LAYOUT_AddChild, pg[PGID_CANCEL] = ButtonObject,
-            GA_ID, PGID_CANCEL,
-            GA_Text, "Abbruch",
-            GA_RelVerify, TRUE,
-            GA_TabCycle, TRUE,
-            BUTTON_TextPen, 1,
-            BUTTON_BackgroundPen, 0,
-            BUTTON_FillTextPen, 1,
-            BUTTON_FillPen, 3,
-          ButtonEnd,
-          
+            LAYOUT_AddChild, pg[pr_wordwrap] = CheckBoxObject,
+                GA_ID, PR_ID_WORDWRAP,
+                GA_Text, "_Word Wrap",
+                GA_Selected, tmp.wordWrap,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
         LayoutEnd,
-            CHILD_WeightedHeight, 0,
 
-        End, /* VGroup PGID_MAIN */
+        /* Row 2 */
+        LAYOUT_AddChild, LayoutObject,
+            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+            LAYOUT_LeftSpacing, 5,
+            LAYOUT_TopSpacing, 5,
 
+            LAYOUT_AddChild, pg[pr_blockcursor] = CheckBoxObject,
+                GA_ID, PR_ID_BLOCKCURSOR,
+                GA_Text, "_Block Cursor",
+                GA_Selected, tmp.blockCursor,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
+
+            LAYOUT_AddChild, pg[pr_flashcursor] = CheckBoxObject,
+                GA_ID, PR_ID_FLASHCURSOR,
+                GA_Text, "_Flash Cursor",
+                GA_Selected, tmp.flashCursor,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
+        LayoutEnd,
+
+        /* Row 3 */
+        LAYOUT_AddChild, LayoutObject,
+            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+            LAYOUT_LeftSpacing, 5,
+            LAYOUT_TopSpacing, 5,
+
+            LAYOUT_AddChild, pg[pr_showlfs] = CheckBoxObject,
+                GA_ID, PR_ID_SHOWLFS,
+                GA_Text, "Show _LF's",
+                GA_Selected, tmp.showLFs,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
+
+            LAYOUT_AddChild, pg[pr_showtabs] = CheckBoxObject,
+                GA_ID, PR_ID_SHOWTABS,
+                GA_Text, "Show _TAB's",
+                GA_Selected, tmp.showTABs,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
+        LayoutEnd,
+
+        /* Row 4 */
+        LAYOUT_AddChild, LayoutObject,
+            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+            LAYOUT_LeftSpacing, 5,
+            LAYOUT_TopSpacing, 5,
+
+            LAYOUT_AddChild, pg[pr_showlinenumbers] = CheckBoxObject,
+                GA_ID, PR_ID_SHOWLINENUMBERS,
+                GA_Text, "_Zeilennummern",
+                GA_Selected, tmp.showLineNumbers,
+                GA_RelVerify, TRUE,
+            CheckBoxEnd,
+        LayoutEnd,
+
+        /* Row 5: Zahlen */
+        LAYOUT_AddChild, LayoutObject,
+            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+            LAYOUT_LeftSpacing, 5,
+            LAYOUT_TopSpacing, 5,
+            /* Wrap */
+            LAYOUT_AddChild, pg[pr_wrapmargin] = IntegerObject,
+                GA_ID, PR_ID_WRAPMARGIN,
+                INTEGER_Number, tmp.wrapMargin,
+                INTEGER_Minimum, 0,
+                INTEGER_Maximum, 999,
+                INTEGER_MaxChars, 3,
+                INTEGER_Number, 0,
+                GA_RelVerify, TRUE,
+            IntegerEnd,
+            CHILD_Label, LabelObject,
+                LABEL_Text, "Wrap Margin",
+            LabelEnd,
+
+            /* Tab */
+            LAYOUT_AddChild, pg[pr_tabsize] = IntegerObject,
+                GA_ID, PR_ID_TABSIZE,
+                INTEGER_Number, tmp.tabSize,
+                INTEGER_Minimum, 0,
+                INTEGER_Maximum, 8,
+                INTEGER_MaxChars, 1,
+                INTEGER_Number, 1,
+                GA_RelVerify, TRUE,
+            IntegerEnd,
+            CHILD_Label, LabelObject,
+                LABEL_Text, "Tab Size",
+            LabelEnd,
+
+        LayoutEnd,
+
+    LayoutEnd,
+    CHILD_WeightedHeight, 0,
+
+    /* ---- Spacer (wichtig!) ---- */
+    LAYOUT_AddChild, SpaceObject,
+    SpaceEnd,
+    CHILD_WeightedHeight, 100,
+
+    /* ---- Buttons ---- */
+    LAYOUT_AddChild, LayoutObject,
+        LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+
+        LAYOUT_AddChild, pg[pr_ubern] = ButtonObject,
+            GA_ID, PR_ID_UBERN,
+            GA_Text, "_Uebernehmen",
+            GA_RelVerify, TRUE,
+        ButtonEnd,
+
+        LAYOUT_AddChild, pg[pr_save] = ButtonObject,
+            GA_ID, PR_ID_SAVE,
+            GA_Text, "_Save",
+            GA_RelVerify, TRUE,
+        ButtonEnd,
+
+        LAYOUT_AddChild, pg[pr_cancel] = ButtonObject,
+            GA_ID, PR_ID_CANCEL,
+            GA_Text, "_Abbruch",
+            GA_RelVerify, TRUE,
+        ButtonEnd,
+
+    LayoutEnd,
+    CHILD_WeightedHeight, 0,
+
+LayoutEnd,
+   
     EndWindow;
 
     if(!prefsWin) return FALSE;
@@ -357,7 +286,7 @@ BOOL openPrefsWindow(struct Window *parentWin, struct EditorPrefs *prefs)
     GetAttr(WINDOW_SigMask, prefsWin, &signal);
 
     /* ---------------------------------------------------------------- */
-    /* Eigene Event-Schleife (modal)                                     */
+    /* Event-Loop                                                        */
     /* ---------------------------------------------------------------- */
     while(!done)
     {
@@ -374,73 +303,53 @@ BOOL openPrefsWindow(struct Window *parentWin, struct EditorPrefs *prefs)
                 case WMHI_GADGETUP:
                 {
                     ULONG val;
-
                     switch(result & WMHI_GADGETMASK)
                     {
-                        /* ---- Checkboxen ---- */
-                        case PGID_AUTOINDENT:
-                            GetAttr(GA_Selected, pg[PGID_AUTOINDENT], &val);
+                        case PR_ID_AUTOINDENT:
+                            GetAttr(GA_Selected, pg[pr_autoindent], &val);
                             tmp.autoIndent = (BOOL)val;
                             break;
-                        case PGID_STRIPEDOL:
-                            GetAttr(GA_Selected, pg[PGID_STRIPEDOL], &val);
-                            tmp.stripEOL = (BOOL)val;
-                            break;
-                        case PGID_WORDWRAP:
-                            GetAttr(GA_Selected, pg[PGID_WORDWRAP], &val);
+                        case PR_ID_WORDWRAP:
+                            GetAttr(GA_Selected, pg[pr_wordwrap], &val);
                             tmp.wordWrap = (BOOL)val;
                             break;
-                        case PGID_AUTOPADEDOL:
-                            GetAttr(GA_Selected, pg[PGID_AUTOPADEDOL], &val);
-                            tmp.autoPadEOL = (BOOL)val;
-                            break;
-                        case PGID_BLOCKCURSOR:
-                            GetAttr(GA_Selected, pg[PGID_BLOCKCURSOR], &val);
+                        case PR_ID_BLOCKCURSOR:
+                            GetAttr(GA_Selected, pg[pr_blockcursor], &val);
                             tmp.blockCursor = (BOOL)val;
                             break;
-                        case PGID_FLASHCURSOR:
-                            GetAttr(GA_Selected, pg[PGID_FLASHCURSOR], &val);
+                        case PR_ID_FLASHCURSOR:
+                            GetAttr(GA_Selected, pg[pr_flashcursor], &val);
                             tmp.flashCursor = (BOOL)val;
                             break;
-                        case PGID_SEARCHZOOM:
-                            GetAttr(GA_Selected, pg[PGID_SEARCHZOOM], &val);
-                            tmp.searchZoom = (BOOL)val;
-                            break;
-                        case PGID_NEWSLIDER:
-                            GetAttr(GA_Selected, pg[PGID_NEWSLIDER], &val);
-                            tmp.newSlider = (BOOL)val;
-                            break;
-                        case PGID_SHOWLFS:
-                            GetAttr(GA_Selected, pg[PGID_SHOWLFS], &val);
+                        case PR_ID_SHOWLFS:
+                            GetAttr(GA_Selected, pg[pr_showlfs], &val);
                             tmp.showLFs = (BOOL)val;
                             break;
-                        case PGID_SHOWTABS:
-                            GetAttr(GA_Selected, pg[PGID_SHOWTABS], &val);
+                        case PR_ID_SHOWTABS:
+                            GetAttr(GA_Selected, pg[pr_showtabs], &val);
                             tmp.showTABs = (BOOL)val;
                             break;
-
-                        /* ---- Integer-Felder ---- */
-                        case PGID_WRAPMARGIN:
-                            GetAttr(INTEGER_Number, pg[PGID_WRAPMARGIN], &val);
+                        case PR_ID_SHOWLINENUMBERS:
+                            GetAttr(GA_Selected, pg[pr_showlinenumbers], &val);
+                            tmp.showLineNumbers = (BOOL)val;
+                            break;
+                        case PR_ID_WRAPMARGIN:
+                            GetAttr(INTEGER_Number, pg[pr_wrapmargin], &val);
                             tmp.wrapMargin = (LONG)val;
                             break;
-                        case PGID_TABSIZE:
-                            GetAttr(INTEGER_Number, pg[PGID_TABSIZE], &val);
+                        case PR_ID_TABSIZE:
+                            GetAttr(INTEGER_Number, pg[pr_tabsize], &val);
                             tmp.tabSize = (LONG)val;
                             break;
-
-                        /* ---- Buttons ---- */
-                        case PGID_ACCEPT:
-                            *prefs = tmp;   /* Werte ?bernehmen */
+                        case PR_ID_UBERN:
+                            *prefs = tmp;  /* sofort uebernehmen */
                             accept = TRUE;
                             done   = TRUE;
                             break;
-                        case PGID_SAVE:
-                            *prefs = tmp;   /* Werte ?bernehmen */
-                            accept = TRUE;
+                        case PR_ID_SAVE:
                             done   = TRUE;
                             break;
-                        case PGID_CANCEL:
+                        case PR_ID_CANCEL:
                             done = TRUE;
                             break;
                     }
