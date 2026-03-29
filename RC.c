@@ -96,12 +96,43 @@ struct Library *IntegerBase;
 struct RCed RCed;
 
 /* Editor-Einstellungen (fuer RC_prefs.h) */
-/* autoIndent, wordWrap, blockCursor, flashCursor,
-   showLFs, showTABs, showLineNumbers, wrapMargin, tabSize */
-struct EditorPrefs edPrefs = { FALSE,FALSE,TRUE,FALSE,
-                               FALSE,FALSE,FALSE,
-                               76, 8 };
+/* Editor-Einstellungen (fuer RC_prefs.h)
+   autoIndent, wrapMargin, fixedFont, showLineNumbers,
+   readOnly, tabSize, indentWidth                      */
+struct EditorPrefs edPrefs = { FALSE,  /* autoIndent      */
+                               76,     /* wrapMargin      */
+                               FALSE,  /* fixedFont       */
+                               FALSE,  /* showLineNumbers */
+                               4,      /* tabSize         */
+                               0 };    /* indentWidth     */
 /* Hilfsmakro f?r Zugriff auf das aktive Dokument */
+/* ================================================================
+ * Prefs laden/speichern -- Datei: ENVARC:RC.prefs
+ * Format: binaer, direkt struct EditorPrefs
+ * ================================================================ */
+
+static const char *PREFS_FILE = "ENVARC:RC.prefs";
+
+void savePrefs(struct EditorPrefs *prefs)
+{
+    BPTR f = Open(PREFS_FILE, MODE_NEWFILE);
+    if(f)
+    {
+        Write(f, prefs, sizeof(struct EditorPrefs));
+        Close(f);
+    }
+}
+
+void loadPrefs(struct EditorPrefs *prefs)
+{
+    BPTR f = Open(PREFS_FILE, MODE_OLDFILE);
+    if(f)
+    {
+        Read(f, prefs, sizeof(struct EditorPrefs));
+        Close(f);
+    }
+}
+
 #define CURRENT_DOC (&RCed.documents[RCed.activeDocIndex])
 
 
@@ -199,7 +230,7 @@ int main(int argc, char *argv[])
         "OK"
     };
     ULONG  signal, result;
-    ULONG  done   = FALSE;
+    BOOL  done   = FALSE;
     ULONG  status = 0;
     char  *retASL   = NULL;
     ULONG  timerSig  = 0;
@@ -232,6 +263,9 @@ int main(int argc, char *argv[])
 
     if(!openLibraries())
         goto cleanup;
+
+    /* Prefs laden (ENVARC:RC.prefs) -- Standardwerte bleiben wenn Datei fehlt */
+    loadPrefs(&edPrefs);
 
     /* ClickTab-Struktur initialisieren */
     createClickTabs();
@@ -283,14 +317,18 @@ int main(int argc, char *argv[])
                         GA_ID,                         GID_TEXTEDITOR,
                         GA_TEXTEDITOR_ExportWrap,       0,
                         GA_TEXTEDITOR_ImportWrap,       0,
-                        GA_TEXTEDITOR_FixedFont,        FALSE,
                         GA_TEXTEDITOR_Flow,             GV_TEXTEDITOR_Flow_Left,
-                        GA_TEXTEDITOR_IndentWidth,      0,
                         GA_TEXTEDITOR_LineEndingExport, LINEENDING_LF,
-                        GA_TEXTEDITOR_ShowLineNumbers,  FALSE,
-                        GA_TEXTEDITOR_SpacesPerTAB,     1,
+                        /* Startwerte aus edPrefs (bereits durch loadPrefs() befuellt) */
+                        GA_TEXTEDITOR_FixedFont,        (ULONG)edPrefs.fixedFont,
+                        GA_TEXTEDITOR_IndentWidth,      (ULONG)edPrefs.indentWidth,
+                        GA_TEXTEDITOR_ShowLineNumbers,  (ULONG)edPrefs.showLineNumbers,
+                        GA_TEXTEDITOR_SpacesPerTAB,     (ULONG)edPrefs.tabSize,
+                        GA_TEXTEDITOR_WrapBorder,       (ULONG)edPrefs.wrapMargin,
                         GA_TEXTEDITOR_TabKeyPolicy,
-                        GV_TEXTEDITOR_TabKey_IndentsAfter,
+                            edPrefs.autoIndent
+                                ? GV_TEXTEDITOR_TabKey_IndentsAfter
+                                : GV_TEXTEDITOR_TabKey_IndentsLine,
                     End,
                 CHILD_WeightedWidth, 100,
 
@@ -659,19 +697,57 @@ int main(int argc, char *argv[])
                                 uberReq(verBuf, uber_object, window);
                                 break;
                             }
-                            case MENU_EINSTELLUNG_ZN:
+
+
+                            case MENU_BEARBEITEN_COPY:
                             {
-                                GetAttr(GA_TEXTEDITOR_ShowLineNumbers,
-                                        main_gadgets[GID_TEXTEDITOR], &status);
-                                SetGadgetAttrs(
+                                DoGadgetMethod(
                                     main_gadgets[GID_TEXTEDITOR],
                                     window, NULL,
-                                    GA_TEXTEDITOR_ShowLineNumbers,
-                                    status ? FALSE : TRUE,
-                                    TAG_DONE);
+                                    GM_TEXTEDITOR_ARexxCmd, NULL,
+                                    "COPY");
                                 break;
                             }
 
+                            case MENU_BEARBEITEN_CUT:
+                            {
+                                DoGadgetMethod(
+                                    main_gadgets[GID_TEXTEDITOR],
+                                    window, NULL,
+                                    GM_TEXTEDITOR_ARexxCmd, NULL,
+                                    "CUT");
+                                break;
+                            }
+
+                            case MENU_BEARBEITEN_PASTE:
+                            {
+                                DoGadgetMethod(
+                                    main_gadgets[GID_TEXTEDITOR],
+                                    window, NULL,
+                                    GM_TEXTEDITOR_ARexxCmd, NULL,
+                                    "PASTE");
+                                break;
+                            }
+
+                            case MENU_BEARBEITEN_UNDO:
+                            {
+                                DoGadgetMethod(
+                                    main_gadgets[GID_TEXTEDITOR],
+                                    window, NULL,
+                                    GM_TEXTEDITOR_ARexxCmd, NULL,
+                                    "UNDO");
+                                break;
+                            }
+
+                            case MENU_BEARBEITEN_REDO:
+                            {
+                                DoGadgetMethod(
+                                    main_gadgets[GID_TEXTEDITOR],
+                                    window, NULL,
+                                    GM_TEXTEDITOR_ARexxCmd, NULL,
+                                    "REDO");
+                                break;
+                            }
 
                             case MENU_BEARBEITEN_SUCHEN:
                             {
@@ -834,14 +910,25 @@ int main(int argc, char *argv[])
                             
                             case MENU_PREFS_ALL:
                             {
-                               if(openPrefsWindow(window, &edPrefs))
+                                ULONG prefsResult = openPrefsWindow(window, &edPrefs);
+                                if(prefsResult)
                                 {
-                                    /* Werte sofort auf TextEditor anwenden */
+                                    /* Alle Werte auf TextEditor anwenden */
                                     SetGadgetAttrs(main_gadgets[GID_TEXTEDITOR], window, NULL,
-                                        GA_TEXTEDITOR_ShowLineNumbers, edPrefs.showLineNumbers,
-                                        GA_TEXTEDITOR_WrapBorder,      edPrefs.wrapMargin,
-                                        GA_TEXTEDITOR_SpacesPerTAB,    edPrefs.tabSize,
+                                        GA_TEXTEDITOR_ShowLineNumbers, (ULONG)edPrefs.showLineNumbers,
+                                        GA_TEXTEDITOR_WrapBorder,      (ULONG)edPrefs.wrapMargin,
+                                        GA_TEXTEDITOR_SpacesPerTAB,    (ULONG)edPrefs.tabSize,
+                                        GA_TEXTEDITOR_FixedFont,        (ULONG)edPrefs.fixedFont,
+                                        GA_TEXTEDITOR_IndentWidth,      (ULONG)edPrefs.indentWidth,
+                                        GA_TEXTEDITOR_TabKeyPolicy,
+                                            edPrefs.autoIndent
+                                                ? GV_TEXTEDITOR_TabKey_IndentsAfter
+                                                : GV_TEXTEDITOR_TabKey_IndentsLine,
                                         TAG_DONE);
+
+                                    /* Bei Save (2): Prefs in ENVARC:RC.prefs speichern */
+                                    if(prefsResult == 2)
+                                        savePrefs(&edPrefs);
                                 }
                                 break;
                             }

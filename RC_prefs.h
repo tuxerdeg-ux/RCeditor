@@ -1,10 +1,22 @@
 /*
 ** RC_prefs.h - Editor Preferences Window
 **
-** Benoetigt zusaetzlich zu RC_setup.h:
-**   LabelBase  = OpenLibrary("images/label.image",  0L);
-**   IntegerBase = OpenLibrary("gadgets/integer.gadget", 0L);
+** Nur Einstellungen die texteditor.gadget tatsaechlich unterstuetzt.
+**
+** Benoetigt in RC_setup.h:
+**   LabelBase   = OpenLibrary("images/label.image",       0L);
+**   IntegerBase  = OpenLibrary("gadgets/integer.gadget",  0L);
 **   CheckBoxBase = OpenLibrary("gadgets/checkbox.gadget", 0L);
+**
+** Mapping auf texteditor.gadget-Attribute:
+**   autoIndent      -> GA_TEXTEDITOR_TabKeyPolicy (IndentsAfter/IndentsLine)
+**   wordWrap        -> GA_TEXTEDITOR_WrapBorder (0 = aus, >0 = Spalte)
+**   fixedFont       -> GA_TEXTEDITOR_FixedFont
+**   showLineNumbers -> GA_TEXTEDITOR_ShowLineNumbers
+**   readOnly        -> GA_ReadOnly
+**   tabSize         -> GA_TEXTEDITOR_SpacesPerTAB
+**   indentWidth     -> GA_TEXTEDITOR_IndentWidth
+**   wrapMargin      -> GA_TEXTEDITOR_WrapBorder
 */
 
 #ifndef RC_PREFS_H
@@ -21,42 +33,50 @@
 
 /* ------------------------------------------------------------------ */
 /* Preferences-Datenstruktur                                           */
+/* Nur Felder die texteditor.gadget direkt unterstuetzt.              */
 /* ------------------------------------------------------------------ */
 
 struct EditorPrefs
 {
+    /* GA_TEXTEDITOR_TabKeyPolicy */
     BOOL autoIndent;
-    BOOL wordWrap;
-    BOOL blockCursor;
-    BOOL flashCursor;
-    BOOL showLFs;
-    BOOL showTABs;
-    BOOL showLineNumbers;
+
+    /* GA_TEXTEDITOR_WrapBorder (0=aus) */
     LONG wrapMargin;
+
+    /* GA_TEXTEDITOR_FixedFont */
+    BOOL fixedFont;
+
+    /* GA_TEXTEDITOR_ShowLineNumbers */
+    BOOL showLineNumbers;
+
+    /* GA_ReadOnly */
+    BOOL readOnly;
+
+    /* GA_TEXTEDITOR_SpacesPerTAB */
     LONG tabSize;
+
+    /* GA_TEXTEDITOR_IndentWidth (0=Tabs, >0=Spaces pro Ebene) */
+    LONG indentWidth;
 };
 
 /* ------------------------------------------------------------------ */
-/* Gadget-Indizes (Array-Position)                                     */
+/* Gadget-Indizes                                                      */
 /* ------------------------------------------------------------------ */
 enum prefs_idx {
     pr_grp,
     pr_row1,
     pr_autoindent,
-    pr_wordwrap,
+    pr_fixedfont,
     pr_row2,
-    pr_blockcursor,
-    pr_flashcursor,
-    pr_row3,
-    pr_showlfs,
-    pr_showtabs,
-    pr_row4,
     pr_showlinenumbers,
-    pr_row5,
+    pr_row_nums,
     pr_grp_wrap,
     pr_wrapmargin,
     pr_grp_tab,
     pr_tabsize,
+    pr_grp_indent,
+    pr_indentwidth,
     pr_row_btn,
     pr_ubern,
     pr_save,
@@ -65,21 +85,19 @@ enum prefs_idx {
 };
 
 /* ------------------------------------------------------------------ */
-/* Gadget-IDs (fuer WMHI_GADGETMASK)                                   */
+/* Gadget-IDs                                                          */
 /* ------------------------------------------------------------------ */
 enum prefs_id {
-    PR_ID_AUTOINDENT     = 101,
-    PR_ID_WORDWRAP       = 102,
-    PR_ID_BLOCKCURSOR    = 103,
-    PR_ID_FLASHCURSOR    = 104,
-    PR_ID_SHOWLFS        = 105,
-    PR_ID_SHOWTABS       = 106,
-    PR_ID_SHOWLINENUMBERS= 107,
-    PR_ID_WRAPMARGIN     = 108,
-    PR_ID_TABSIZE        = 109,
-    PR_ID_UBERN          = 110,
-    PR_ID_SAVE           = 111,
-    PR_ID_CANCEL         = 112
+    PR_ID_AUTOINDENT      = 101,
+    PR_ID_FIXEDFONT       = 102,
+    PR_ID_SHOWLINENUMBERS = 103,
+
+    PR_ID_WRAPMARGIN      = 104,
+    PR_ID_TABSIZE         = 105,
+    PR_ID_INDENTWIDTH     = 106,
+    PR_ID_UBERN           = 110,
+    PR_ID_SAVE            = 111,
+    PR_ID_CANCEL          = 112
 };
 
 /* ------------------------------------------------------------------ */
@@ -99,179 +117,195 @@ BOOL openPrefsWindow(struct Window *parentWin, struct EditorPrefs *prefs)
     struct EditorPrefs tmp = *prefs;
 
     prefsWin = WindowObject,
-        WA_Title,        "Editor Preferences",
-        WA_ScreenTitle,  "RC - Editor Preferences",
-        WA_Left,         50,
-        WA_Top,          50,
-        WA_Width,        360,
-        WA_Height,       280,
-        WA_MinWidth,     300,
-        WA_MinHeight,    200,
-        WA_MaxWidth,     8192,
-        WA_MaxHeight,    8192,
-        WA_CloseGadget,  TRUE,
-        WA_DepthGadget,  TRUE,
-        WA_DragBar,      TRUE,
-        WA_Activate,     TRUE,
-        WA_NoCareRefresh,TRUE,
+        WA_Title,         "Editor Preferences",
+        WA_ScreenTitle,   "RC - Editor Preferences",
+        WA_Left,          50,
+        WA_Top,           50,
+        WA_Width,         360,
+        WA_Height,        320,
+        WA_MinWidth,      300,
+        WA_MinHeight,     250,
+        WA_MaxWidth,      8192,
+        WA_MaxHeight,     8192,
+        WA_CloseGadget,   TRUE,
+        WA_DepthGadget,   TRUE,
+        WA_DragBar,       TRUE,
+        WA_Activate,      TRUE,
+        WA_NoCareRefresh, TRUE,
 
         WINDOW_ParentGroup, VLayoutObject,
-    LAYOUT_SpaceOuter, FALSE,
-    LAYOUT_DeferLayout, TRUE,
+            LAYOUT_SpaceOuter,  TRUE,
+            LAYOUT_DeferLayout, TRUE,
 
-    /* ---- Checkbox-Gruppe ---- */
-    LAYOUT_AddChild, LayoutObject,
-        LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-        LAYOUT_BevelStyle, BVS_GROUP,
-        LAYOUT_SpaceInner, TRUE,
+            /* ======================================================= */
+            /* Gruppe: Boolean-Einstellungen                            */
+            /* ======================================================= */
+            LAYOUT_AddChild, pg[pr_grp] = LayoutObject,
+                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                LAYOUT_BevelStyle,  BVS_GROUP,
+                LAYOUT_Label,       "Verhalten",
+                LAYOUT_SpaceInner,  TRUE,
 
-        /* Row 1 */
-        LAYOUT_AddChild, LayoutObject,
-            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-            LAYOUT_LeftSpacing, 5,
-            LAYOUT_TopSpacing, 5,
+                /* Row 1: Auto Indent / Fixed Font */
+                LAYOUT_AddChild, pg[pr_row1] = LayoutObject,
+                    LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+                    LAYOUT_LeftSpacing, 5,
+                    LAYOUT_TopSpacing,  5,
 
-            LAYOUT_AddChild, pg[pr_autoindent] = CheckBoxObject,
-                GA_ID, PR_ID_AUTOINDENT,
-                GA_Text, "_Auto Indent",
-                GA_Selected, tmp.autoIndent,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
+                    LAYOUT_AddChild, pg[pr_autoindent] = CheckBoxObject,
+                        GA_ID,              PR_ID_AUTOINDENT,
+                        GA_Text,            "_Auto Indent",
+                        GA_Selected,        tmp.autoIndent,
+                        GA_RelVerify,       TRUE,
+                        CHECKBOX_TextPlace, PLACETEXT_RIGHT,
+                    CheckBoxEnd,
 
-            LAYOUT_AddChild, pg[pr_wordwrap] = CheckBoxObject,
-                GA_ID, PR_ID_WORDWRAP,
-                GA_Text, "_Word Wrap",
-                GA_Selected, tmp.wordWrap,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
-        LayoutEnd,
+                    LAYOUT_AddChild, pg[pr_fixedfont] = CheckBoxObject,
+                        GA_ID,              PR_ID_FIXEDFONT,
+                        GA_Text,            "_Fixed Font",
+                        GA_Selected,        tmp.fixedFont,
+                        GA_RelVerify,       TRUE,
+                        CHECKBOX_TextPlace, PLACETEXT_RIGHT,
+                    CheckBoxEnd,
+                LayoutEnd,
+                CHILD_WeightedHeight, 0,
 
-        /* Row 2 */
-        LAYOUT_AddChild, LayoutObject,
-            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-            LAYOUT_LeftSpacing, 5,
-            LAYOUT_TopSpacing, 5,
+                /* Row 2: Zeilennummern / Read Only */
+                LAYOUT_AddChild, pg[pr_row2] = LayoutObject,
+                    LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+                    LAYOUT_LeftSpacing, 5,
+                    LAYOUT_TopSpacing,  5,
 
-            LAYOUT_AddChild, pg[pr_blockcursor] = CheckBoxObject,
-                GA_ID, PR_ID_BLOCKCURSOR,
-                GA_Text, "_Block Cursor",
-                GA_Selected, tmp.blockCursor,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
+                    LAYOUT_AddChild, pg[pr_showlinenumbers] = CheckBoxObject,
+                        GA_ID,              PR_ID_SHOWLINENUMBERS,
+                        GA_Text,            "_Zeilennummern",
+                        GA_Selected,        tmp.showLineNumbers,
+                        GA_RelVerify,       TRUE,
+                        CHECKBOX_TextPlace, PLACETEXT_RIGHT,
+                    CheckBoxEnd,
 
-            LAYOUT_AddChild, pg[pr_flashcursor] = CheckBoxObject,
-                GA_ID, PR_ID_FLASHCURSOR,
-                GA_Text, "_Flash Cursor",
-                GA_Selected, tmp.flashCursor,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
-        LayoutEnd,
+                LayoutEnd,
+                CHILD_WeightedHeight, 0,
 
-        /* Row 3 */
-        LAYOUT_AddChild, LayoutObject,
-            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-            LAYOUT_LeftSpacing, 5,
-            LAYOUT_TopSpacing, 5,
+            LayoutEnd, /* pr_grp */
+            CHILD_WeightedHeight, 0,
 
-            LAYOUT_AddChild, pg[pr_showlfs] = CheckBoxObject,
-                GA_ID, PR_ID_SHOWLFS,
-                GA_Text, "Show _LF's",
-                GA_Selected, tmp.showLFs,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
+            /* ======================================================= */
+            /* Gruppe: Numerische Einstellungen                         */
+            /* ======================================================= */
+            LAYOUT_AddChild, pg[pr_row_nums] = LayoutObject,
+                LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+                LAYOUT_BevelStyle,  BVS_GROUP,
+                LAYOUT_Label,       "Werte",
+                LAYOUT_SpaceInner,  TRUE,
+                LAYOUT_LeftSpacing, 5,
+                LAYOUT_TopSpacing,  5,
 
-            LAYOUT_AddChild, pg[pr_showtabs] = CheckBoxObject,
-                GA_ID, PR_ID_SHOWTABS,
-                GA_Text, "Show _TAB's",
-                GA_Selected, tmp.showTABs,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
-        LayoutEnd,
+                /* Wrap Margin: 0 = aus, >0 = Spalte */
+                LAYOUT_AddChild, pg[pr_grp_wrap] = LayoutObject,
+                    LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                    LAYOUT_TopSpacing,  5,
 
-        /* Row 4 */
-        LAYOUT_AddChild, LayoutObject,
-            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-            LAYOUT_LeftSpacing, 5,
-            LAYOUT_TopSpacing, 5,
+                    LAYOUT_AddChild, pg[pr_wrapmargin] = IntegerObject,
+                        GA_ID,           PR_ID_WRAPMARGIN,
+                        GA_RelVerify,    TRUE,
+                        GA_TabCycle,     TRUE,
+                        INTEGER_Number,tmp.wrapMargin,
+                        INTEGER_Minimum, 0,
+                        INTEGER_Maximum, 999,
+                        INTEGER_MaxChars,3,
+                    IntegerEnd,
+                    CHILD_Label, LabelObject,
+                        LABEL_Text, "Wrap Margin",
+                    LabelEnd,
+                    CHILD_WeightedWidth, 10,
+                LayoutEnd,
+                CHILD_WeightedWidth, 10,
 
-            LAYOUT_AddChild, pg[pr_showlinenumbers] = CheckBoxObject,
-                GA_ID, PR_ID_SHOWLINENUMBERS,
-                GA_Text, "_Zeilennummern",
-                GA_Selected, tmp.showLineNumbers,
-                GA_RelVerify, TRUE,
-            CheckBoxEnd,
-        LayoutEnd,
+                /* Tab Size: Spaces pro TAB */
+                LAYOUT_AddChild, pg[pr_grp_tab] = LayoutObject,
+                    LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                    LAYOUT_LeftSpacing, 5,
+                    LAYOUT_TopSpacing,  5,
 
-        /* Row 5: Zahlen */
-        LAYOUT_AddChild, LayoutObject,
-            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-            LAYOUT_LeftSpacing, 5,
-            LAYOUT_TopSpacing, 5,
-            /* Wrap */
-            LAYOUT_AddChild, pg[pr_wrapmargin] = IntegerObject,
-                GA_ID, PR_ID_WRAPMARGIN,
-                INTEGER_Number, tmp.wrapMargin,
-                INTEGER_Minimum, 0,
-                INTEGER_Maximum, 999,
-                INTEGER_MaxChars, 3,
-                INTEGER_Number, 0,
-                GA_RelVerify, TRUE,
-            IntegerEnd,
-            CHILD_Label, LabelObject,
-                LABEL_Text, "Wrap Margin",
-            LabelEnd,
+                    LAYOUT_AddChild, pg[pr_tabsize] = IntegerObject,
+                        GA_ID,           PR_ID_TABSIZE,
+                        GA_RelVerify,    TRUE,
+                        GA_TabCycle,     TRUE,
+                        INTEGER_Minimum, 1,
+                        INTEGER_Maximum, 32,
+                        INTEGER_MaxChars,2,
+                        INTEGER_Number,tmp.tabSize,
+                    IntegerEnd,
+                    CHILD_Label, LabelObject,
+                        LABEL_Text, "Tab Size",
+                    LabelEnd,
+                    CHILD_WeightedWidth, 10,
+                LayoutEnd,
+                CHILD_WeightedWidth, 10,
 
-            /* Tab */
-            LAYOUT_AddChild, pg[pr_tabsize] = IntegerObject,
-                GA_ID, PR_ID_TABSIZE,
-                INTEGER_Number, tmp.tabSize,
-                INTEGER_Minimum, 0,
-                INTEGER_Maximum, 8,
-                INTEGER_MaxChars, 1,
-                INTEGER_Number, 1,
-                GA_RelVerify, TRUE,
-            IntegerEnd,
-            CHILD_Label, LabelObject,
-                LABEL_Text, "Tab Size",
-            LabelEnd,
+                /* Indent Width: 0=Tabs, >0=Spaces pro Ebene */
+                LAYOUT_AddChild, pg[pr_grp_indent] = LayoutObject,
+                    LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                    LAYOUT_LeftSpacing, 5,
+                    LAYOUT_TopSpacing,  5,
 
-        LayoutEnd,
+                    LAYOUT_AddChild, pg[pr_indentwidth] = IntegerObject,
+                        GA_ID,           PR_ID_INDENTWIDTH,
+                        GA_RelVerify,    TRUE,
+                        GA_TabCycle,     TRUE,
+                        INTEGER_Number,  tmp.indentWidth,
+                        INTEGER_Minimum, 0,
+                        INTEGER_Maximum, 16,
+                        INTEGER_MaxChars,2,
+                    IntegerEnd,
+                    CHILD_Label, LabelObject,
+                        LABEL_Text, "Indent Width",
+                    LabelEnd,
+                    CHILD_WeightedWidth, 10,
+                LayoutEnd,
+                CHILD_WeightedWidth, 10,
 
-    LayoutEnd,
-    CHILD_WeightedHeight, 0,
+            LayoutEnd, /* pr_row_nums */
+            CHILD_WeightedHeight, 0,
 
-    /* ---- Spacer (wichtig!) ---- */
-    LAYOUT_AddChild, SpaceObject,
-    SpaceEnd,
-    CHILD_WeightedHeight, 100,
+            /* Spacer */
+            LAYOUT_AddChild, SpaceObject,
+            SpaceEnd,
+            CHILD_WeightedHeight, 100,
 
-    /* ---- Buttons ---- */
-    LAYOUT_AddChild, LayoutObject,
-        LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+            /* ======================================================= */
+            /* Buttons                                                  */
+            /* ======================================================= */
+            LAYOUT_AddChild, pg[pr_row_btn] = LayoutObject,
+                LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
 
-        LAYOUT_AddChild, pg[pr_ubern] = ButtonObject,
-            GA_ID, PR_ID_UBERN,
-            GA_Text, "_Uebernehmen",
-            GA_RelVerify, TRUE,
-        ButtonEnd,
+                LAYOUT_AddChild, pg[pr_ubern] = ButtonObject,
+                    GA_ID,        PR_ID_UBERN,
+                    GA_Text,      "_Uebernehmen",
+                    GA_RelVerify, TRUE,
+                    GA_TabCycle,  TRUE,
+                ButtonEnd,
 
-        LAYOUT_AddChild, pg[pr_save] = ButtonObject,
-            GA_ID, PR_ID_SAVE,
-            GA_Text, "_Save",
-            GA_RelVerify, TRUE,
-        ButtonEnd,
+                LAYOUT_AddChild, pg[pr_save] = ButtonObject,
+                    GA_ID,        PR_ID_SAVE,
+                    GA_Text,      "_Save",
+                    GA_RelVerify, TRUE,
+                    GA_TabCycle,  TRUE,
+                ButtonEnd,
 
-        LAYOUT_AddChild, pg[pr_cancel] = ButtonObject,
-            GA_ID, PR_ID_CANCEL,
-            GA_Text, "_Abbruch",
-            GA_RelVerify, TRUE,
-        ButtonEnd,
+                LAYOUT_AddChild, pg[pr_cancel] = ButtonObject,
+                    GA_ID,        PR_ID_CANCEL,
+                    GA_Text,      "_Abbruch",
+                    GA_RelVerify, TRUE,
+                    GA_TabCycle,  TRUE,
+                ButtonEnd,
 
-    LayoutEnd,
-    CHILD_WeightedHeight, 0,
+            LayoutEnd,
+            CHILD_WeightedHeight, 0,
 
-LayoutEnd,
-   
+        LayoutEnd, /* VLayoutObject */
+
     EndWindow;
 
     if(!prefsWin) return FALSE;
@@ -285,9 +319,6 @@ LayoutEnd,
 
     GetAttr(WINDOW_SigMask, prefsWin, &signal);
 
-    /* ---------------------------------------------------------------- */
-    /* Event-Loop                                                        */
-    /* ---------------------------------------------------------------- */
     while(!done)
     {
         Wait(signal);
@@ -309,25 +340,9 @@ LayoutEnd,
                             GetAttr(GA_Selected, pg[pr_autoindent], &val);
                             tmp.autoIndent = (BOOL)val;
                             break;
-                        case PR_ID_WORDWRAP:
-                            GetAttr(GA_Selected, pg[pr_wordwrap], &val);
-                            tmp.wordWrap = (BOOL)val;
-                            break;
-                        case PR_ID_BLOCKCURSOR:
-                            GetAttr(GA_Selected, pg[pr_blockcursor], &val);
-                            tmp.blockCursor = (BOOL)val;
-                            break;
-                        case PR_ID_FLASHCURSOR:
-                            GetAttr(GA_Selected, pg[pr_flashcursor], &val);
-                            tmp.flashCursor = (BOOL)val;
-                            break;
-                        case PR_ID_SHOWLFS:
-                            GetAttr(GA_Selected, pg[pr_showlfs], &val);
-                            tmp.showLFs = (BOOL)val;
-                            break;
-                        case PR_ID_SHOWTABS:
-                            GetAttr(GA_Selected, pg[pr_showtabs], &val);
-                            tmp.showTABs = (BOOL)val;
+                        case PR_ID_FIXEDFONT:
+                            GetAttr(GA_Selected, pg[pr_fixedfont], &val);
+                            tmp.fixedFont = (BOOL)val;
                             break;
                         case PR_ID_SHOWLINENUMBERS:
                             GetAttr(GA_Selected, pg[pr_showlinenumbers], &val);
@@ -341,12 +356,20 @@ LayoutEnd,
                             GetAttr(INTEGER_Number, pg[pr_tabsize], &val);
                             tmp.tabSize = (LONG)val;
                             break;
+                        case PR_ID_INDENTWIDTH:
+                            GetAttr(INTEGER_Number, pg[pr_indentwidth], &val);
+                            tmp.indentWidth = (LONG)val;
+                            break;
+
+                        /* Uebernehmen: sofort anwenden, Fenster bleibt offen */
                         case PR_ID_UBERN:
-                            *prefs = tmp;  /* sofort uebernehmen */
-                            accept = TRUE;
+                            *prefs = tmp;
+                            accept = 1;
                             done   = TRUE;
                             break;
                         case PR_ID_SAVE:
+                            *prefs = tmp;
+                            accept = 2;
                             done   = TRUE;
                             break;
                         case PR_ID_CANCEL:
