@@ -49,9 +49,10 @@
 #include "RC_thelp.h"
 
 #include "RC_prefs.h"
+#include "RC_highlight.h"
 
-const char verstag[] = "\0$VER: RC 0.2a (27.03.2026)";
-const char *version  = "RC 0.2a (27.03.2026)";
+const char verstag[] = "\0$VER: RC 0.3 (31.03.2026)";
+const char *version  = "RC 0.3 (31.03.2026)";
 
 /* VBCC Stack */
 LONG __stack = 100000;
@@ -135,6 +136,17 @@ void loadPrefs(struct EditorPrefs *prefs)
 
 #define CURRENT_DOC (&RCed.documents[RCed.activeDocIndex])
 
+void setEditorContents(struct Gadget *editor, struct Window *win,
+                               const char *buf, const char *filename)
+{
+    int   hlMode = detectHighlightMode(filename);
+    char *hlBuf  = highlightText(buf, hlMode);
+    SetGadgetAttrs(editor, win, NULL,
+        GA_TEXTEDITOR_Contents, (APTR)(hlBuf ? hlBuf : buf),
+        TAG_DONE);
+    if(hlBuf) FreeVec(hlBuf);
+}
+
 
 
 
@@ -204,8 +216,7 @@ static char *loadAndDisplay(const char    *name,
         FreeVec(oldBuf);
 
     DoGadgetMethod(editor, win, NULL, GM_TEXTEDITOR_ClearText, NULL);
-    SetGadgetAttrs(editor, win, NULL,
-        GA_TEXTEDITOR_Contents, (APTR)newBuf, TAG_DONE);
+    setEditorContents(editor, win, newBuf, name);
     SetGadgetAttrs(editor, win, NULL,
         GA_TEXTEDITOR_HasChanged, FALSE, TAG_DONE);
     RefreshGList(editor, win, NULL, 1);
@@ -317,6 +328,9 @@ int main(int argc, char *argv[])
                         GA_ID,                         GID_TEXTEDITOR,
                         GA_TEXTEDITOR_ExportWrap,       0,
                         GA_TEXTEDITOR_ImportWrap,       0,
+                        /* Plain ImportHook: interpretiert ESC-Sequenzen
+                         * fuer Syntax-Highlighting (Bold, Farbe etc.)  */
+                        GA_TEXTEDITOR_ImportHook,       GV_TEXTEDITOR_ImportHook_Plain,
                         GA_TEXTEDITOR_Flow,             GV_TEXTEDITOR_Flow_Left,
                         GA_TEXTEDITOR_LineEndingExport, LINEENDING_LF,
                         /* Startwerte aus edPrefs (bereits durch loadPrefs() befuellt) */
@@ -402,8 +416,8 @@ int main(int argc, char *argv[])
     {
         DoGadgetMethod(main_gadgets[GID_TEXTEDITOR], window, NULL,
             GM_TEXTEDITOR_ClearText, NULL);
-        SetGadgetAttrs(main_gadgets[GID_TEXTEDITOR], window, NULL,
-            GA_TEXTEDITOR_Contents, (APTR)RCed.documents[0].buffer, TAG_DONE);
+        setEditorContents(main_gadgets[GID_TEXTEDITOR], window,
+            RCed.documents[0].buffer, RCed.documents[0].dateiname);
         SetGadgetAttrs(main_gadgets[GID_TEXTEDITOR], window, NULL,
             GA_TEXTEDITOR_HasChanged, FALSE, TAG_DONE);
         RefreshGList(main_gadgets[GID_TEXTEDITOR], window, NULL, 1);
@@ -517,8 +531,9 @@ int main(int argc, char *argv[])
                                                 doc->fileLines++;
 
                                             /* Inhalt in TextEditor laden */
+                                            setEditorContents(main_gadgets[GID_TEXTEDITOR], window,
+                                                doc->buffer, doc->dateiname);
                                             SetGadgetAttrs(main_gadgets[GID_TEXTEDITOR], window, NULL,
-                                                GA_TEXTEDITOR_Contents, (APTR)doc->buffer,
                                                 GA_TEXTEDITOR_HasChanged, FALSE,
                                                 TAG_DONE);
                                             updateActiveTabLabel(window);

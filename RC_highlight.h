@@ -34,6 +34,8 @@
 #define HIGHLIGHT_C     1
 #define HIGHLIGHT_SHELL 2
 
+void updateTabLabels(struct Window *win); // Forward declaration
+
 /* ------------------------------------------------------------------ */
 /* C-Keywords                                                          */
 /* ------------------------------------------------------------------ */
@@ -125,12 +127,12 @@ char *highlightText(const char *src, int mode)
 
     while(*s)
     {
-        /* ---- Zeilenende: Zustände zurücksetzen ---- */
+        /* ---- Zeilenende: Zust?nde zur?cksetzen ---- */
         if(*s == '\n')
         {
             if(inComment || inLineComment || inString)
             {
-                /* Normal zurücksetzen */
+                /* Normal zur?cksetzen */
                 *d++ = '\033'; *d++ = 'n';
             }
             inLineComment = FALSE;
@@ -139,7 +141,7 @@ char *highlightText(const char *src, int mode)
             continue;
         }
 
-        /* ---- Bereits in Kommentar (C: /* ... */) ---- */
+        /* ---- Bereits in Kommentar  ---- */
         if(inComment)
         {
             *d++ = *s;
@@ -185,7 +187,7 @@ char *highlightText(const char *src, int mode)
         /* ---- C Block-Kommentar Start: /* ---- */
         if(mode == HIGHLIGHT_C && *s == '/' && *(s+1) == '*')
         {
-            *d++ = '\033'; *d++ = 'p'; *d++ = '2'; /* Halfshine */
+            *d++ = '\033'; *d++ = 'i'; /* italic fuer Kommentare */
             *d++ = *s++; *d++ = *s++;
             inComment = TRUE;
             continue;
@@ -194,7 +196,7 @@ char *highlightText(const char *src, int mode)
         /* ---- C Zeilen-Kommentar: // ---- */
         if(mode == HIGHLIGHT_C && *s == '/' && *(s+1) == '/')
         {
-            *d++ = '\033'; *d++ = 'p'; *d++ = '2'; /* Halfshine */
+            *d++ = '\033'; *d++ = 'i'; /* italic fuer Kommentare */
             *d++ = *s++; *d++ = *s++;
             inLineComment = TRUE;
             continue;
@@ -203,7 +205,7 @@ char *highlightText(const char *src, int mode)
         /* ---- Shell Kommentar: # (nur am Zeilenanfang oder nach Space) ---- */
         if(mode == HIGHLIGHT_SHELL && *s == '#')
         {
-            *d++ = '\033'; *d++ = 'p'; *d++ = '2'; /* Halfshine */
+            *d++ = '\033'; *d++ = 'i'; /* italic fuer Kommentare */
             *d++ = *s++;
             inLineComment = TRUE;
             continue;
@@ -213,7 +215,7 @@ char *highlightText(const char *src, int mode)
         if(*s == '"' || *s == '\'')
         {
             stringChar = *s;
-            *d++ = '\033'; *d++ = 'p'; *d++ = '1'; /* Shine */
+            *d++ = '\033'; *d++ = 'u'; /* underline fuer Strings */
             *d++ = *s++;
             inString = TRUE;
             continue;
@@ -265,7 +267,7 @@ char *highlightText(const char *src, int mode)
 int detectHighlightMode(const char *filename)
 {
     const char *ext;
-    int i, len;
+    int len;
 
     if(!filename) return HIGHLIGHT_NONE;
 
@@ -291,5 +293,7 @@ int detectHighlightMode(const char *filename)
 
     return HIGHLIGHT_NONE;
 }
+
+
 
 #endif /* RC_HIGHLIGHT_H */

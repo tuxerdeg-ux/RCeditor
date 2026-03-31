@@ -27,6 +27,12 @@ struct NewMenu mainMenu[] =
     { NM_ITEM,  NM_BARLABEL,             NULL, 0,                    0, NULL }, /* Index 9 */
     { NM_ITEM,  "Gehe zu Zeile...",      "G",  0,                    0, NULL }, /* Index 10 */
 
+    { NM_TITLE, "vbcc",         NULL, 0,                    0, NULL },
+    { NM_ITEM,  "vbcc-Config",           NULL, 0,                    0, NULL }, /* Index 0 */
+    { NM_ITEM,  "vbcc-Compile",          NULL, 0,                    0, NULL }, /* Index 1 */
+    { NM_ITEM,  "vbcc-Run",              NULL, 0,                    0, NULL }, /* Index 2 */
+
+
     { NM_TITLE, "Einstellungen",         NULL, 0,                    0, NULL },
     { NM_ITEM,  "Preferences",           NULL, 0,                    0, NULL }, /* Index 0 */
 
@@ -75,7 +81,18 @@ struct NewMenu mainMenu[] =
 #define MENU_BEARBEITEN_ERSETZEN   FULLMENUNUM(1, 8, NOSUB)
 #define MENU_BEARBEITEN_GOTO       FULLMENUNUM(1, 10, NOSUB)
 
+/* vbcc-Menü
+ *  0: vbcc-Config
+ *  1: vbcc-Compile
+ *  2: vbcc-Run
+
+ */
+#define MENU_VBCC_CONFIG           FULLMENUNUM(2, 0, NOSUB)
+#define MENU_VBCC_COMPILE          FULLMENUNUM(2, 1, NOSUB)
+#define MENU_VBCC_RUN              FULLMENUNUM(2, 2, NOSUB)
+
+
 /* Einstellungen-Menü
  *  0: Preferences
  */
-#define MENU_PREFS_ALL             FULLMENUNUM(2, 0, NOSUB)
+#define MENU_PREFS_ALL             FULLMENUNUM(3, 0, NOSUB)

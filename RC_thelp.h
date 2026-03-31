@@ -1,5 +1,5 @@
 /* ==================================================================
- * Dokument-Verwaltung für Multi-Document-Support
+ * Dokument-Verwaltung f?r Multi-Document-Support
  * ================================================================== */
 
 /* Initialisiert alle 10 Dokumente */
@@ -27,7 +27,7 @@ void initializeDocuments(void)
     RCed.documents[0].isOpen = TRUE;
 }
 
-/* Gibt aktuelles Dokument zurück */
+/* Gibt aktuelles Dokument zur?ck */
 struct RCedDocument *getCurrentDocument(void)
 {
     if(RCed.activeDocIndex < 10)
@@ -36,12 +36,20 @@ struct RCedDocument *getCurrentDocument(void)
 }
 
 /* Wechselt zum angegebenen Dokument und zeigt es an */
-/* refreshWindowTitle() -- Stub, Fenstertitel bleibt fix.
- * Der Dateiname steht im Tab-Label (updateActiveTabLabel).
- */
 void refreshWindowTitle(struct Window *win)
 {
-    win = win;
+    struct RCedDocument *doc = getCurrentDocument();
+    char title[280];
+
+    if(!doc)
+        return;
+
+    if(doc->hasChanged)
+        SNPrintf(title, sizeof(title), "%s *", doc->dateiname);
+    else
+        SNPrintf(title, sizeof(title), "%s", doc->dateiname);
+
+    SetWindowTitles(win, title, (UBYTE *)~0);
 }
 
 
@@ -78,6 +86,47 @@ void switchDocument(ULONG index, struct Gadget *editor, struct Window *win)
 }
 
 /* Speichert den aktuellen Buffer zur?ck ins aktive Dokument */
+/* Entfernt alle ESC-Sequenzen aus einem Buffer.
+ * Gibt einen neuen AllocVec-Buffer zurueck -- Caller muss FreeVec() aufrufen.
+ * Noetig weil GM_TEXTEDITOR_ExportText die internen Style-Markierungen
+ * als ESC-Sequenzen exportiert, die wir nicht im raw Buffer haben wollen.
+ */
+static char *stripEscSequences(const char *src)
+{
+    char *dst, *d;
+    const char *s;
+    ULONG len;
+
+    if(!src) return NULL;
+    len = strlen(src);
+    dst = (char *)AllocVec(len + 1, MEMF_CLEAR);
+    if(!dst) return NULL;
+
+    d = dst;
+    s = src;
+    while(*s)
+    {
+        if(*s == '\033')  /* ESC-Zeichen */
+        {
+            s++;
+            /* Ueberspringe das Steuerbyte */
+            if(*s == 'p' && *(s+1))  /* \033p[x] = Farbe */
+                s += 2;
+            else if(*s == '[')       /* \033[...m ANSI-Sequenz */
+            {
+                while(*s && *s != 'm') s++;
+                if(*s) s++;
+            }
+            else if(*s)              /* \033b, \033n, \033i, \033u etc. */
+                s++;
+            continue;
+        }
+        *d++ = *s++;
+    }
+    *d = '\0';
+    return dst;
+}
+
 void saveCurrentDocumentBuffer(struct Gadget *editor, struct Window *win)
 {
     struct RCedDocument *doc = getCurrentDocument();
@@ -92,28 +141,29 @@ void saveCurrentDocumentBuffer(struct Gadget *editor, struct Window *win)
     
     if(exported)
     {
-        /* Alten Buffer freigeben */
+        /* ESC-Sequenzen entfernen -- wir speichern immer reinen Text */
+        char *clean = stripEscSequences((char *)exported);
+
         if(doc->buffer)
             FreeVec(doc->buffer);
-        
-        /* Neuen Buffer speichern */
-        doc->buffer = (char *)AllocVec(strlen((char *)exported) + 1, MEMF_CLEAR);
-        if(doc->buffer)
-            strcpy(doc->buffer, (char *)exported);
-        
+
+        doc->buffer = clean ? clean : (char *)AllocVec(1, MEMF_CLEAR);
+
         /* Datei-Statistiken berechnen */
-        doc->fileSize = strlen((char *)exported);
+        doc->fileSize = doc->buffer ? strlen(doc->buffer) : 0;
         doc->fileLines = 0;
-        int i;
-        for(i = 0; i < (int)doc->fileSize; i++)
-            if(exported[i] == '\n')
-                doc->fileLines++;
+        {
+            int i;
+            for(i = 0; i < (int)doc->fileSize; i++)
+                if(doc->buffer[i] == '\n')
+                    doc->fileLines++;
+        }
         if(doc->fileSize > 0)
             doc->fileLines++;
     }
 }
 
-/* öffnet ein neues leeres Dokument */
+/* ?ffnet ein neues leeres Dokument */
 ULONG openNewDocument(void)
 {
     int i;
@@ -274,3 +324,4 @@ void updateTabLabels(struct Window *win)
     /* Aktualisiere ClickTab */
     RefreshGList((struct Gadget *)RCed.tabObject, win, NULL, 1);
 }
+
